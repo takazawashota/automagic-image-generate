@@ -1,0 +1,26 @@
+{
+    "name": "Automagic Image Generate",
+    "version": "1.0.0",
+    "download_url": "https://tzweb.noor.jp/plugins/automagic-image-generate/downloads/automagic-image-generate-1.1.0.zip",
+    "requires": "5.0",
+    "tested": "6.4",
+    "requires_php": "7.4",
+    "last_updated": "2025-01-15 10:00:00",
+    "upgrade_notice": "新機能: 行間と文字間隔の設定が可能になりました。",
+    "author": "Shota Takazawa",
+    "author_homepage": "https://example.com",
+    "sections": {
+        "description": "投稿ページや固定ページ、カスタム投稿タイプのサムネイル画像をPHPで自動生成するプラグインです。",
+        "installation": "1. プラグインをアップロード\n2. プラグインを有効化\n3. 設定画面で各種設定を行う",
+        "changelog": "<h3>1.1.0</h3><ul><li>行間設定機能を追加</li><li>文字間隔設定機能を追加</li><li>背景画像の透明度コントロールを改善</li><li>プレビュー機能のエラーハンドリングを強化</li></ul><h3>1.0.0</h3><ul><li>初回リリース</li></ul>",
+        "faq": "<h4>日本語フォントが必要ですか？</h4><p>はい、日本語テキストを使用する場合はNotoSansJPなどのフォントが必要です。</p>"
+    },
+    "banners": {
+        "low": "https://tzweb.noor.jp/assets/banner-772x250.png",
+        "high": "https://tzweb.noor.jp/assets/banner-1544x500.png"
+    },
+    "icons": {
+        "1x": "https://tzweb.noor.jp/assets/icon-128x128.png",
+        "2x": "https://tzweb.noor.jp/assets/icon-256x256.png"
+    }
+}
