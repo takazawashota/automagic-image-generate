@@ -467,6 +467,9 @@ class Automagic_Image_Generate {
             return;
         }
         
+        // 現在のタブを取得
+        $active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'settings';
+        
         // フォントの状態をチェック
         $font_path = $this->get_japanese_font_path();
         
@@ -474,69 +477,122 @@ class Automagic_Image_Generate {
         <div class="wrap">
             <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
             
-            <!-- フォントファイルの状態 -->
-            <div class="notice <?php echo $font_path ? 'notice-success' : 'notice-warning'; ?>" style="padding: 15px; margin: 20px 0; border-left-width: 4px;">
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <span style="font-size: 24px;">
-                        <?php echo $font_path ? '✓' : '⚠'; ?>
-                    </span>
-                    <div style="flex: 1;">
-                        <p style="margin: 0 0 5px 0; font-size: 15px; font-weight: 600;">
-                            <?php if ($font_path): ?>
-                                <span style="color: #2c7d2f;">日本語フォントが利用可能です</span>
-                            <?php else: ?>
-                                <span style="color: #d97706;">日本語フォントが見つかりません</span>
-                            <?php endif; ?>
-                        </p>
-                        
-                        <?php if ($font_path): ?>
-                            <p style="margin: 0; color: #666; font-size: 13px;">
-                                使用中のフォント: <code style="background: #f0f0f1; padding: 2px 6px; border-radius: 3px;"><?php echo esc_html(basename($font_path)); ?></code>
-                            </p>
-                        <?php else: ?>
-                            <p style="margin: 5px 0; color: #666; font-size: 13px; line-height: 1.6;">
-                                日本語を含むタイトルで画像を生成するには、日本語フォントが必要です。<br>
-                                <strong>フォント配置先:</strong> <code style="background: #f0f0f1; padding: 2px 6px; border-radius: 3px;"><?php echo esc_html(AMIG_PLUGIN_DIR); ?>fonts/</code>
-                            </p>
-                            <p style="margin: 10px 0 0 0;">
-                                <a href="https://fonts.google.com/noto/specimen/Noto+Sans+JP" target="_blank" class="button button-secondary" style="text-decoration: none;">
-                                    <span class="dashicons dashicons-download" style="margin-top: 3px;"></span> Google Fonts からダウンロード
-                                </a>
-                            </p>
-                        <?php endif; ?>
+            <!-- タブナビゲーション -->
+            <h2 class="nav-tab-wrapper">
+                <a href="?page=automagic-image-generate&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">
+                    <span class="dashicons dashicons-admin-settings" style="font-size: 16px; width: 16px; height: 16px; margin-top: 6px;"></span>
+                    基本設定
+                </a>
+                <a href="?page=automagic-image-generate&tab=design" class="nav-tab <?php echo $active_tab == 'design' ? 'nav-tab-active' : ''; ?>">
+                    <span class="dashicons dashicons-admin-customizer" style="font-size: 16px; width: 16px; height: 16px; margin-top: 6px;"></span>
+                    デザイン設定
+                </a>
+                <a href="?page=automagic-image-generate&tab=preview" class="nav-tab <?php echo $active_tab == 'preview' ? 'nav-tab-active' : ''; ?>">
+                    <span class="dashicons dashicons-format-image" style="font-size: 16px; width: 16px; height: 16px; margin-top: 6px;"></span>
+                    プレビュー
+                </a>
+                <a href="?page=automagic-image-generate&tab=fonts" class="nav-tab <?php echo $active_tab == 'fonts' ? 'nav-tab-active' : ''; ?>">
+                    <span class="dashicons dashicons-media-text" style="font-size: 16px; width: 16px; height: 16px; margin-top: 6px;"></span>
+                    フォント管理
+                </a>
+            </h2>
+            
+            <?php if ($active_tab == 'settings'): ?>
+                <!-- 基本設定タブ -->
+                <form action="options.php" method="post">
+                    <?php
+                    settings_fields($this->option_name);
+                    echo '<h2>基本設定</h2>';
+                    echo '<p>投稿のタイトルを使用して、自動的にサムネイル画像を生成します。</p>';
+                    echo '<table class="form-table" role="presentation">';
+                    do_settings_fields($this->option_name, 'amig_general_section');
+                    echo '</table>';
+                    submit_button('設定を保存');
+                    ?>
+                </form>
+                
+            <?php elseif ($active_tab == 'design'): ?>
+                <!-- デザイン設定タブ -->
+                <form action="options.php" method="post">
+                    <?php
+                    settings_fields($this->option_name);
+                    // デザイン設定セクションのみ表示
+                    echo '<h2>デザイン設定</h2>';
+                    echo '<p>生成する画像のデザインをカスタマイズできます。</p>';
+                    echo '<table class="form-table" role="presentation">';
+                    do_settings_fields($this->option_name, 'amig_design_section');
+                    echo '</table>';
+                    submit_button('設定を保存');
+                    ?>
+                </form>
+                
+            <?php elseif ($active_tab == 'preview'): ?>
+                <!-- プレビュータブ -->
+                <div style="margin-top: 20px;">
+                    <h2>プレビュー生成</h2>
+                    <div style="background: #fff; border: 1px solid #ccd0d4; padding: 20px; border-radius: 4px; box-shadow: 0 1px 1px rgba(0,0,0,.04);">
+                        <div style="margin-bottom: 15px;">
+                            <label for="amig-preview-text" style="display: block; margin-bottom: 8px; font-weight: 600;">プレビューテキスト:</label>
+                            <input type="text" id="amig-preview-text" value="サンプルタイトル" style="width: 100%; max-width: 500px; padding: 8px 12px;" />
+                        </div>
+                        <button type="button" id="amig-preview-btn" class="button button-primary" style="display: inline-flex; align-items: center; gap: 6px;">
+                            <span class="dashicons dashicons-format-image" style="font-size: 16px; width: 16px; height: 16px;"></span>
+                            プレビューを生成
+                        </button>
+                        <div id="amig-preview-loading" style="display: none; color: #666; margin: 15px 0;">
+                            <span class="spinner is-active" style="float: none; margin: 0 10px 0 0;"></span>
+                            画像を生成中...
+                        </div>
+                        <div id="amig-preview-container" style="margin-top: 20px;">
+                            <p style="color: #666;">上のボタンをクリックして、現在の設定でプレビュー画像を生成します。</p>
+                        </div>
                     </div>
                 </div>
-            </div>
-            
-            <form action="options.php" method="post">
-                <?php
-                settings_fields($this->option_name);
-                do_settings_sections($this->option_name);
-                submit_button('設定を保存');
-                ?>
-            </form>
-            
-            <hr>
-            
-            <h2>プレビュー</h2>
-            <div style="background: #f5f5f5; padding: 20px; border-radius: 5px;">
-                <div style="margin-bottom: 15px;">
-                    <input type="text" id="amig-preview-text" value="サンプルタイトル" style="width: 400px; max-width: 100%;" />
-                    <button type="button" id="amig-preview-btn" class="button button-primary">プレビューを生成</button>
+                
+            <?php elseif ($active_tab == 'fonts'): ?>
+                <!-- フォント管理タブ -->
+                <div style="margin-top: 20px;">
+                    <!-- フォントファイルの状態 -->
+                    <div class="notice <?php echo $font_path ? 'notice-success' : 'notice-warning'; ?>" style="padding: 15px; margin: 20px 0; border-left-width: 4px;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <span style="font-size: 24px;">
+                                <?php echo $font_path ? '✓' : '⚠'; ?>
+                            </span>
+                            <div style="flex: 1;">
+                                <p style="margin: 0 0 5px 0; font-size: 15px; font-weight: 600;">
+                                    <?php if ($font_path): ?>
+                                        <span style="color: #2c7d2f;">日本語フォントが利用可能です</span>
+                                    <?php else: ?>
+                                        <span style="color: #d97706;">日本語フォントが見つかりません</span>
+                                    <?php endif; ?>
+                                </p>
+                                
+                                <?php if ($font_path): ?>
+                                    <p style="margin: 0; color: #666; font-size: 13px;">
+                                        使用中のフォント: <code style="background: #f0f0f1; padding: 2px 6px; border-radius: 3px;"><?php echo esc_html(basename($font_path)); ?></code>
+                                    </p>
+                                <?php else: ?>
+                                    <p style="margin: 5px 0; color: #666; font-size: 13px; line-height: 1.6;">
+                                        日本語を含むタイトルで画像を生成するには、日本語フォントが必要です。<br>
+                                        <strong>フォント配置先:</strong> <code style="background: #f0f0f1; padding: 2px 6px; border-radius: 3px;"><?php echo esc_html(AMIG_PLUGIN_DIR); ?>fonts/</code>
+                                    </p>
+                                    <p style="margin: 10px 0 0 0;">
+                                        <a href="https://fonts.google.com/noto/specimen/Noto+Sans+JP" target="_blank" class="button button-secondary" style="text-decoration: none;">
+                                            <span class="dashicons dashicons-download" style="margin-top: 3px;"></span> Google Fonts からダウンロード
+                                        </a>
+                                    </p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <?php
+                    // フォントマネージャーの詳細を表示
+                    do_action('amig_license_page_content');
+                    ?>
                 </div>
-                <div id="amig-preview-loading" style="display: none; color: #666; margin: 15px 0;">
-                    <span class="spinner is-active" style="float: none; margin: 0 10px 0 0;"></span>
-                    画像を生成中...
-                </div>
-                <div id="amig-preview-container" style="margin-top: 20px;">
-                    <p style="color: #666;">上のボタンをクリックして、現在の設定でプレビュー画像を生成します。</p>
-                </div>
-            </div>
-
-            <?php
-            // フォントマネージャーなど他の機能が表示できるようにフックを提供
-            do_action('amig_license_page_content');
-            ?>
+                
+            <?php endif; ?>
         </div>
         <?php
     }
