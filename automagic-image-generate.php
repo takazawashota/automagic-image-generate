@@ -521,7 +521,6 @@ class Automagic_Image_Generate {
             <h2>プレビュー</h2>
             <div style="background: #f5f5f5; padding: 20px; border-radius: 5px;">
                 <div style="margin-bottom: 15px;">
-                    <label for="amig-preview-text"><strong>プレビューテキスト:</strong></label><br>
                     <input type="text" id="amig-preview-text" value="サンプルタイトル" style="width: 400px; max-width: 100%;" />
                     <button type="button" id="amig-preview-btn" class="button button-primary">プレビューを生成</button>
                 </div>

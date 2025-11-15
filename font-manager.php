@@ -248,31 +248,80 @@ class Automagic_Font_Manager {
         
         ?>
         <!-- フォント状態セクション -->
-        <div class="postbox">
-            <h2 class="hndle">📥 フォントファイル状態</h2>
-            <div class="inside">
+        <div class="postbox" style="border: 1px solid <?php echo empty($missing_fonts) ? '#c6e1c6' : '#f0d9b5'; ?>; border-left: 4px solid <?php echo empty($missing_fonts) ? '#46b450' : '#f0b849'; ?>; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #f0f0f1;">
+                <div style="width: 26px; height: 26px; border-radius: 50%; background: <?php echo empty($missing_fonts) ? 'linear-gradient(135deg, #46b450 0%, #2c7d2f 100%)' : 'linear-gradient(135deg, #f0b849 0%, #d97706 100%)'; ?>; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+                    <span style="font-size: 12px; color: white;">
+                        <?php echo empty($missing_fonts) ? '✓' : '📥'; ?>
+                    </span>
+                </div>
+                <h2 style="margin: 0; font-size: 16px; font-weight: 600; color: #1d2327;">
+                    フォントファイル状態
+                </h2>
+            </div>
+            <div class="inside" style="padding: 20px;margin: 0;">
                 <?php if (empty($missing_fonts)): ?>
-                    <p>✅ <strong>すべてのフォントファイルが正常にインストールされています。</strong></p>
-                    <p>インストール済み: <?php echo count($this->required_fonts); ?>個のフォントファイル</p>
-                <?php else: ?>
-                    <p>⚠️ <strong><?php echo count($missing_fonts); ?>個のフォントファイルが不足しています。</strong></p>
-                    <p>プラグインを正常に動作させるには、日本語フォントファイルが必要です。</p>
+                    <!-- 成功状態 -->
+                    <div style="background: #f0f6f0; border: 1px solid #c6e1c6; border-radius: 4px; padding: 16px; margin-bottom: 12px;">
+                        <p style="margin: 0 0 8px 0; color: #2c7d2f; font-size: 15px; font-weight: 600;">
+                            すべてのフォントファイルが正常にインストールされています
+                        </p>
+                        <p style="margin: 0; color: #50575e; font-size: 13px;">
+                            インストール済み: <strong><?php echo count($this->required_fonts); ?>個</strong>のフォントファイル
+                        </p>
+                    </div>
                     
-                    <h4>不足しているフォント:</h4>
-                    <ul>
+                    <div style="background: #f6f7f7; border-radius: 3px; padding: 12px 16px;">
+                        <p style="margin: 0; color: #50575e; font-size: 13px; line-height: 1.6;">
+                            <span class="dashicons dashicons-info" style="color: #2271b1; vertical-align: middle;"></span>
+                            日本語フォントが利用可能です。画像生成の準備が整っています。
+                        </p>
+                    </div>
+                <?php else: ?>
+                    <!-- 警告状態 -->
+                    <div style="background: #fff3cd; border: 1px solid #f0b849; border-radius: 4px; padding: 16px; margin-bottom: 16px;">
+                        <p style="margin: 0 0 8px 0; color: #856404; font-size: 15px; font-weight: 600;">
+                            <?php echo count($missing_fonts); ?>個のフォントファイルが不足しています
+                        </p>
+                        <p style="margin: 0; color: #856404; font-size: 13px; line-height: 1.6;">
+                            プラグインを正常に動作させるには、日本語フォントファイルが必要です。
+                        </p>
+                    </div>
+                    
+                    <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #1d2327; font-weight: 600;">
+                        <span class="dashicons dashicons-list-view" style="vertical-align: middle; color: #2271b1;"></span>
+                        不足しているフォント:
+                    </h4>
+                    <ul style="margin: 0 0 20px 0; padding-left: 24px; list-style: none;">
                         <?php foreach ($missing_fonts as $font): ?>
-                            <li><?php echo esc_html($font); ?></li>
+                            <li style="padding: 8px 12px; margin-bottom: 6px; background: #f6f7f7; border-left: 3px solid #d63638; border-radius: 3px; font-size: 13px; color: #50575e;">
+                                <span class="dashicons dashicons-warning" style="color: #d63638; font-size: 16px; vertical-align: middle; margin-right: 6px;"></span>
+                                <code style="background: white; padding: 2px 6px; border-radius: 2px; font-size: 12px;"><?php echo esc_html($font); ?></code>
+                            </li>
                         <?php endforeach; ?>
                     </ul>
                     
-                    <p>
-                        <button type="button" class="button button-primary" id="amig-download-fonts">
-                            フォントファイルをダウンロード
+                    <div style="background: #f6f7f7; border-radius: 4px; padding: 16px; margin-bottom: 16px;">
+                        <p style="margin: 0 0 12px 0; color: #1d2327; font-size: 13px; line-height: 1.6;">
+                            <span class="dashicons dashicons-info" style="color: #2271b1; vertical-align: middle;"></span>
+                            下のボタンをクリックすると、不足しているフォントファイルを自動的にダウンロードしてインストールします。
+                        </p>
+                        <button type="button" class="button button-primary" id="amig-download-fonts" style="display: inline-flex; align-items: center; gap: 6px;">
+                            <span class="dashicons dashicons-download" style="font-size: 16px; width: 16px; height: 16px;"></span>
+                            フォントファイルをダウンロード (<?php echo count($missing_fonts); ?>個)
                         </button>
-                        <span id="amig-download-progress" style="display: none; margin-left: 10px;">
+                        <span id="amig-download-progress" style="display: none; margin-left: 12px; color: #2271b1; font-size: 13px; font-weight: 500;">
+                            <span class="dashicons dashicons-update" style="animation: rotation 1s infinite linear; vertical-align: middle;"></span>
                             ダウンロード中... <span id="amig-download-count">0</span>/<?php echo count($missing_fonts); ?>
                         </span>
-                    </p>
+                    </div>
+                    
+                    <style>
+                        @keyframes rotation {
+                            from { transform: rotate(0deg); }
+                            to { transform: rotate(359deg); }
+                        }
+                    </style>
                     
                     <script>
                     document.getElementById('amig-download-fonts').addEventListener('click', function() {
@@ -292,17 +341,17 @@ class Automagic_Font_Manager {
                                 try {
                                     var response = JSON.parse(xhr.responseText);
                                     if (response.success) {
-                                        progress.innerHTML = '✅ ダウンロード完了！ページを再読み込みしています...';
+                                        progress.innerHTML = '<span class="dashicons dashicons-yes-alt" style="color: #46b450; vertical-align: middle;"></span> <span style="color: #2c7d2f;">ダウンロード完了！ページを再読み込みしています...</span>';
                                         setTimeout(function() {
                                             location.reload();
                                         }, 2000);
                                     } else {
-                                        progress.innerHTML = '❌ エラー: ' + (response.data || 'ダウンロードに失敗しました');
-                                        button.style.display = 'inline-block';
+                                        progress.innerHTML = '<span class="dashicons dashicons-dismiss" style="color: #d63638; vertical-align: middle;"></span> <span style="color: #d63638;">エラー: ' + (response.data || 'ダウンロードに失敗しました') + '</span>';
+                                        button.style.display = 'inline-flex';
                                     }
                                 } catch (e) {
-                                    progress.innerHTML = '❌ エラー: 不正な応答';
-                                    button.style.display = 'inline-block';
+                                    progress.innerHTML = '<span class="dashicons dashicons-dismiss" style="color: #d63638; vertical-align: middle;"></span> <span style="color: #d63638;">エラー: 不正な応答</span>';
+                                    button.style.display = 'inline-flex';
                                 }
                             }
                         };
