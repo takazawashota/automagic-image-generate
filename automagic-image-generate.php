@@ -22,8 +22,21 @@ define('AMIG_VERSION', '1.0.0');
 define('AMIG_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AMIG_PLUGIN_URL', plugin_dir_url(__FILE__));
 
+// 汎用アップデーター用の設定
+define('PUM_PLUGIN_PREFIX', 'amig');
+define('PUM_PLUGIN_NAME', 'Automagic Image Generate');
+define('PUM_PLUGIN_SLUG', 'automagic-image-generate');
+define('PUM_PLUGIN_FILE', __FILE__);
+define('PUM_LICENSE_SERVER_URL', 'https://sokulabo.com/products/wp-json/sokulabo/v1/license/verify');
+define('PUM_LICENSE_PAGE_URL', 'https://sokulabo.com/products/');
+define('PUM_UPDATE_SERVER_URL', 'https://sokulabo.com/products/plugins/automagic-image-generate/update-info.json');
+define('PUM_LICENSE_PAGE_SLUG', 'amig-license');
+
 // アップデーターを読み込み
-require_once AMIG_PLUGIN_DIR . 'automagic-updater.php';
+require_once AMIG_PLUGIN_DIR . 'universal-plugin-updater.php';
+
+// フォントマネージャーを読み込み
+require_once AMIG_PLUGIN_DIR . 'font-manager.php';
 
 class Automagic_Image_Generate {
     
@@ -495,6 +508,11 @@ class Automagic_Image_Generate {
                 <button type="button" id="amig-generate-btn" class="button button-secondary">画像を生成</button>
                 <span id="amig-status"></span>
             </div>
+
+            <?php
+            // フォントマネージャーなど他の機能が表示できるようにフックを提供
+            do_action('amig_license_page_content');
+            ?>
         </div>
         <?php
     }
@@ -1399,4 +1417,15 @@ function amig_manual_generate_callback() {
     } else {
         wp_send_json_error('画像の生成に失敗しました。ログを確認してください。');
     }
+}
+
+// プラグイン有効化時のフック
+register_activation_hook(__FILE__, 'amig_plugin_activation');
+
+/**
+ * プラグイン有効化時の処理
+ */
+function amig_plugin_activation() {
+    // フォントマネージャーの有効化処理を実行
+    Automagic_Font_Manager::on_plugin_activation();
 }
