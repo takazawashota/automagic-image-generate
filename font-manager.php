@@ -15,17 +15,14 @@ class Automagic_Font_Manager {
     
     /**
      * 必要なフォントファイルのリスト
+     * プラグインで実際に使用するウェイトのみ（5種類）
      */
     private $required_fonts = array(
-        'NotoSansJP-Regular.ttf',
-        'NotoSansJP-Bold.ttf',
-        'NotoSansJP-Medium.ttf',
-        'NotoSansJP-Light.ttf',
-        'NotoSansJP-Black.ttf',
-        'NotoSansJP-ExtraBold.ttf',
-        'NotoSansJP-ExtraLight.ttf',
-        'NotoSansJP-SemiBold.ttf',
-        'NotoSansJP-Thin.ttf'
+        'NotoSansJP-Light.ttf',    // light
+        'NotoSansJP-Regular.ttf',  // normal
+        'NotoSansJP-Medium.ttf',   // medium
+        'NotoSansJP-Bold.ttf',     // bold
+        'NotoSansJP-Black.ttf'     // black
     );
     
     /**
@@ -51,6 +48,7 @@ class Automagic_Font_Manager {
         add_action('admin_init', array($this, 'check_fonts_and_download'));
         add_action('admin_notices', array($this, 'font_download_notice'));
         add_action('wp_ajax_amig_download_fonts', array($this, 'ajax_download_fonts'));
+        add_action('wp_ajax_amig_download_single_font', array($this, 'ajax_download_single_font'));
         
         // ライセンス画面にフォント状態を表示
         add_action('amig_license_page_content', array($this, 'display_font_status'));
@@ -241,6 +239,89 @@ class Automagic_Font_Manager {
     }
     
     /**
+     * AJAX: 単一フォントをダウンロード（逐次処理用）
+     */
+    public function ajax_download_single_font() {
+        // Nonce確認
+        if (!isset($_POST['_ajax_nonce']) || !wp_verify_nonce($_POST['_ajax_nonce'], 'amig_download_fonts')) {
+            wp_send_json_error('セキュリティチェックに失敗しました');
+        }
+        
+        // 権限確認
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('権限がありません');
+        }
+        
+        // タイムアウトとメモリ制限を緩和
+        set_time_limit(120);
+        ini_set('memory_limit', '256M');
+        
+        $missing_fonts = get_option('amig_missing_fonts', array());
+        
+        if (empty($missing_fonts)) {
+            wp_send_json_success('ダウンロード完了');
+        }
+        
+        // 最初のフォントを取得
+        $font = array_shift($missing_fonts);
+        
+        $fonts_dir = $this->get_fonts_dir();
+        
+        // フォントディレクトリが存在しない場合は作成
+        if (!file_exists($fonts_dir)) {
+            wp_mkdir_p($fonts_dir);
+        }
+        
+        // ライセンスキーを取得
+        $license_key = get_option('amig_license_key', '');
+        
+        $font_url = $this->font_base_url . $font;
+        $font_path = $fonts_dir . $font;
+        
+        // フォントファイルをダウンロード
+        $response = wp_remote_get($font_url, array(
+            'timeout' => 120,
+            'headers' => array(
+                'X-License-Key' => $license_key,
+                'X-Site-URL' => get_site_url()
+            )
+        ));
+        
+        if (is_wp_error($response)) {
+            $error_message = $response->get_error_message();
+            wp_send_json_error($font . ': ' . $error_message);
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        
+        if ($response_code !== 200) {
+            wp_send_json_error($font . ': HTTP ' . $response_code);
+        }
+        
+        $font_data = wp_remote_retrieve_body($response);
+        
+        // ファイルに保存
+        $result = file_put_contents($font_path, $font_data);
+        
+        if ($result === false) {
+            wp_send_json_error($font . ': ファイル書き込み失敗');
+        }
+        
+        // 残りのフォントリストを更新
+        update_option('amig_missing_fonts', $missing_fonts);
+        
+        // 残りのフォント数を返す
+        $remaining = count($missing_fonts);
+        
+        if ($remaining === 0) {
+            delete_option('amig_missing_fonts');
+            wp_send_json_success(array('completed' => true, 'remaining' => 0));
+        } else {
+            wp_send_json_success(array('completed' => false, 'remaining' => $remaining));
+        }
+    }
+    
+    /**
      * ライセンス画面でフォント状態を表示
      */
     public function display_font_status() {
@@ -289,8 +370,7 @@ class Automagic_Font_Manager {
                     </div>
                     
                     <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #1d2327; font-weight: 600;">
-                        <span class="dashicons dashicons-list-view" style="vertical-align: middle; color: #2271b1;"></span>
-                        不足しているフォント:
+                        不足しているフォント
                     </h4>
                     <ul style="margin: 0 0 20px 0; padding-left: 24px; list-style: none;">
                         <?php foreach ($missing_fonts as $font): ?>
@@ -327,45 +407,89 @@ class Automagic_Font_Manager {
                     document.getElementById('amig-download-fonts').addEventListener('click', function() {
                         var button = this;
                         var progress = document.getElementById('amig-download-progress');
+                        var countSpan = document.getElementById('amig-download-count');
+                        var totalFonts = <?php echo count($missing_fonts); ?>;
                         
                         button.style.display = 'none';
                         progress.style.display = 'inline';
                         
-                        // AJAXでフォントダウンロード開始
-                        var xhr = new XMLHttpRequest();
-                        xhr.open('POST', ajaxurl);
-                        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                        var downloadedCount = 0;
+                        var errors = [];
                         
-                        xhr.onreadystatechange = function() {
-                            if (xhr.readyState === 4) {
-                                try {
-                                    var response = JSON.parse(xhr.responseText);
-                                    if (response.success) {
-                                        progress.innerHTML = '<span class="dashicons dashicons-yes-alt" style="color: #46b450; vertical-align: middle;"></span> <span style="color: #2c7d2f;">ダウンロード完了！ページを再読み込みしています...</span>';
-                                        setTimeout(function() {
-                                            location.reload();
-                                        }, 2000);
+                        function downloadNextFont() {
+                            var xhr = new XMLHttpRequest();
+                            xhr.open('POST', ajaxurl);
+                            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                            xhr.timeout = 120000; // 2分
+                            
+                            xhr.ontimeout = function() {
+                                errors.push('タイムアウト');
+                                finishDownload();
+                            };
+                            
+                            xhr.onerror = function() {
+                                errors.push('ネットワークエラー');
+                                finishDownload();
+                            };
+                            
+                            xhr.onreadystatechange = function() {
+                                if (xhr.readyState === 4) {
+                                    if (xhr.status === 200) {
+                                        try {
+                                            var response = JSON.parse(xhr.responseText);
+                                            
+                                            if (response.success) {
+                                                downloadedCount++;
+                                                countSpan.textContent = downloadedCount;
+                                                
+                                                // 次のフォントをダウンロード
+                                                if (downloadedCount < totalFonts) {
+                                                    setTimeout(downloadNextFont, 100); // 100ms待機してから次へ
+                                                } else {
+                                                    // 全て完了
+                                                    finishDownload(true);
+                                                }
+                                            } else {
+                                                errors.push(response.data || 'ダウンロード失敗');
+                                                finishDownload();
+                                            }
+                                        } catch (e) {
+                                            errors.push('不正な応答');
+                                            finishDownload();
+                                        }
                                     } else {
-                                        progress.innerHTML = '<span class="dashicons dashicons-dismiss" style="color: #d63638; vertical-align: middle;"></span> <span style="color: #d63638;">エラー: ' + (response.data || 'ダウンロードに失敗しました') + '</span>';
-                                        button.style.display = 'inline-flex';
+                                        errors.push('HTTP ' + xhr.status);
+                                        finishDownload();
                                     }
-                                } catch (e) {
-                                    progress.innerHTML = '<span class="dashicons dashicons-dismiss" style="color: #d63638; vertical-align: middle;"></span> <span style="color: #d63638;">エラー: 不正な応答</span>';
-                                    button.style.display = 'inline-flex';
                                 }
-                            }
-                        };
+                            };
+                            
+                            xhr.send('action=amig_download_single_font&_ajax_nonce=' + '<?php echo wp_create_nonce('amig_download_fonts'); ?>');
+                        }
                         
-                        xhr.send('action=amig_download_fonts&_ajax_nonce=' + '<?php echo wp_create_nonce('amig_download_fonts'); ?>');
+                        function finishDownload(success) {
+                            if (success) {
+                                progress.innerHTML = '<span class="dashicons dashicons-yes-alt" style="color: #46b450; vertical-align: middle;"></span> <span style="color: #2c7d2f;">ダウンロード完了！（' + downloadedCount + '個）ページを再読み込みしています...</span>';
+                                setTimeout(function() {
+                                    location.reload();
+                                }, 2000);
+                            } else {
+                                var errorMsg = errors.length > 0 ? errors.join(', ') : 'エラーが発生しました';
+                                progress.innerHTML = '<span class="dashicons dashicons-dismiss" style="color: #d63638; vertical-align: middle;"></span> <span style="color: #d63638;">エラー: ' + errorMsg + ' (' + downloadedCount + '/' + totalFonts + '個完了)</span>';
+                                button.style.display = 'inline-flex';
+                            }
+                        }
+                        
+                        // 最初のフォントをダウンロード開始
+                        downloadNextFont();
                     });
                     </script>
                 <?php endif; ?>
                 
-                <h4>フォントについて:</h4>
+                <h4>フォントについて</h4>
                 <p>
                     このプラグインでは、美しい日本語テキスト画像を生成するために、
                     Google Fontsの「Noto Sans JP」フォントファミリーを使用しています。
-                    フォントファイルは有効なライセンスを持つユーザーのみダウンロード可能です。
                 </p>
             </div>
         </div>

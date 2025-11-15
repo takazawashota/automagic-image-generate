@@ -56,6 +56,10 @@ class Automagic_Image_Generate {
         add_action('admin_init', array($this, 'register_settings'));
         add_action('save_post', array($this, 'auto_generate_thumbnail'), 10, 3);
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
+        add_action('wp_ajax_amig_bulk_generate', array($this, 'ajax_bulk_generate'));
+        add_action('wp_ajax_amig_bulk_delete', array($this, 'ajax_bulk_delete'));
+        add_action('wp_ajax_amig_clear_skipped', array($this, 'ajax_clear_skipped'));
+        add_action('wp_ajax_amig_delete_single', array($this, 'ajax_delete_single'));
     }
     
     /**
@@ -81,6 +85,26 @@ class Automagic_Image_Generate {
             'manage_options',                     // 権限
             'automagic-image-generate',           // メニュースラッグ（親と同じ）
             array($this, 'settings_page')         // コールバック関数
+        );
+        
+        // サブメニュー（一括生成）を追加
+        add_submenu_page(
+            'automagic-image-generate',           // 親メニューのスラッグ
+            '一括画像生成',                        // ページタイトル
+            '一括画像生成',                        // メニュータイトル
+            'manage_options',                     // 権限
+            'automagic-bulk-generate',            // メニュースラッグ
+            array($this, 'bulk_generate_page')    // コールバック関数
+        );
+        
+        // サブメニュー（生成済み画像管理）を追加
+        add_submenu_page(
+            'automagic-image-generate',           // 親メニューのスラッグ
+            '生成済み画像管理',                    // ページタイトル
+            '生成済み画像管理',                    // メニュータイトル
+            'manage_options',                     // 権限
+            'automagic-manage-images',            // メニュースラッグ
+            array($this, 'manage_images_page')    // コールバック関数
         );
     }
     
@@ -601,8 +625,8 @@ class Automagic_Image_Generate {
      * 管理画面用スクリプトの読み込み
      */
     public function enqueue_admin_scripts($hook) {
-        // トップレベルメニューのページスラッグに変更
-        if ('toplevel_page_automagic-image-generate' !== $hook) {
+        // プラグインのページでのみスクリプトを読み込む
+        if ('toplevel_page_automagic-image-generate' !== $hook && 'automagic-image-generate_page_automagic-bulk-generate' !== $hook) {
             return;
         }
         
@@ -726,6 +750,75 @@ class Automagic_Image_Generate {
     }
     
     /**
+     * サムネイル画像を生成して投稿に設定（一括生成用）
+     * @param int $post_id 投稿ID
+     * @return int|false 生成されたアタッチメントID、失敗時はfalse
+     */
+    public function generate_thumbnail_image($post_id) {
+        // 投稿情報を取得
+        $post = get_post($post_id);
+        if (!$post) {
+            return false;
+        }
+        
+        $title = $post->post_title;
+        
+        if (empty($title)) {
+            return false;
+        }
+        
+        // 設定を取得
+        $options = get_option($this->option_name);
+        $bg_color = isset($options['bg_color']) ? $options['bg_color'] : '#4A90E2';
+        $text_color = isset($options['text_color']) ? $options['text_color'] : '#FFFFFF';
+        $accent_color = isset($options['accent_color']) ? $options['accent_color'] : '#FFD700';
+        $font_size = isset($options['font_size']) ? $options['font_size'] : 48;
+        $font_weight = isset($options['font_weight']) ? $options['font_weight'] : 'normal';
+        $image_style = isset($options['image_style']) ? $options['image_style'] : 'modern';
+        $bg_image_id = isset($options['bg_image']) ? $options['bg_image'] : 0;
+        $bg_image_opacity = isset($options['bg_image_opacity']) ? $options['bg_image_opacity'] : 30;
+        $line_height = isset($options['line_height']) ? $options['line_height'] : 1.5;
+        $letter_spacing = isset($options['letter_spacing']) ? $options['letter_spacing'] : 0;
+        
+        // 画像を生成
+        $image_path = $this->create_thumbnail_image(
+            $title,
+            $bg_color,
+            $text_color,
+            $accent_color,
+            $font_size,
+            $font_weight,
+            $image_style,
+            $bg_image_id,
+            $bg_image_opacity,
+            $line_height,
+            $letter_spacing
+        );
+        
+        if (!$image_path) {
+            return false;
+        }
+        
+        // 画像をメディアライブラリにアップロード
+        $attachment_id = $this->upload_image_to_media_library($image_path, $post_id, $title);
+        
+        // 一時ファイルを削除
+        @unlink($image_path);
+        
+        if ($attachment_id) {
+            // このプラグインで生成した画像であることを示すメタデータを追加
+            update_post_meta($attachment_id, '_amig_generated', '1');
+            update_post_meta($attachment_id, '_amig_generated_date', current_time('mysql'));
+            
+            // サムネイルとして設定
+            set_post_thumbnail($post_id, $attachment_id);
+            return $attachment_id;
+        }
+        
+        return false;
+    }
+    
+    /**
      * サムネイル画像を作成
      */
     private function create_thumbnail_image($title, $bg_color, $text_color, $accent_color, $font_size, $font_weight, $style, $bg_image_id = 0, $bg_image_opacity = 30, $line_height = 1.5, $letter_spacing = 0) {
@@ -745,7 +838,6 @@ class Automagic_Image_Generate {
         $image = imagecreatetruecolor($width, $height);
         
         if (!$image) {
-            error_log('Automagic Image Generate: imagecreatetruecolor 失敗');
             return false;
         }
         
@@ -830,26 +922,19 @@ class Automagic_Image_Generate {
      * 背景画像を描画
      */
     private function draw_background_image($image, $width, $height, $bg_image_id, $opacity) {
-        error_log('Automagic Image Generate: draw_background_image 開始 - bg_image_id: ' . $bg_image_id . ', opacity: ' . $opacity);
-        
         $bg_image_path = get_attached_file($bg_image_id);
         
         if (!$bg_image_path || !file_exists($bg_image_path)) {
-            error_log('Automagic Image Generate: 背景画像が見つかりません - path: ' . $bg_image_path);
             return false;
         }
-        
-        error_log('Automagic Image Generate: 背景画像パス: ' . $bg_image_path);
         
         // 画像タイプを判定
         $image_info = getimagesize($bg_image_path);
         if (!$image_info) {
-            error_log('Automagic Image Generate: getimagesize 失敗');
             return false;
         }
         
         $mime_type = $image_info['mime'];
-        error_log('Automagic Image Generate: 画像タイプ: ' . $mime_type);
         
         // 画像を読み込み
         switch ($mime_type) {
@@ -1391,6 +1476,942 @@ class Automagic_Image_Generate {
         }
         
         return $attachment_id;
+    }
+    
+    /**
+     * 一括画像生成ページの表示
+     */
+    public function bulk_generate_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die('このページにアクセスする権限がありません。');
+        }
+        
+        // 公開されている投稿タイプを取得
+        $post_types = get_post_types(array('public' => true), 'objects');
+        
+        ?>
+        <div class="wrap">
+            <h1>一括画像生成</h1>
+            <p>選択した投稿タイプの投稿に対して、一括でサムネイル画像を生成します。</p>
+                
+            <div class="notice notice-info" style="margin-top: 20px;">
+                <p><strong>🔍 デバッグ情報:</strong></p>
+                <p>エラーが発生した場合は、以下のログファイルを確認してください：</p>
+                <ul style="margin: 10px 0;">
+                    <li><strong>MAMP PHPエラーログ:</strong> <code>/Applications/MAMP/logs/php_error.log</code></li>
+                    <li><strong>WordPressデバッグログ:</strong> <code><?php echo WP_CONTENT_DIR; ?>/debug.log</code></li>
+                    <li><strong>ブラウザコンソール:</strong> F12キーを押してコンソールタブを確認</li>
+                </ul>
+                <p style="margin-top: 10px;">ログには「AMIG」で始まる詳細なデバッグ情報が記録されています。</p>
+            </div>
+                
+                <div style="background: #fff; border: 1px solid #ccd0d4; padding: 20px; border-radius: 4px; box-shadow: 0 1px 1px rgba(0,0,0,.04); margin-top: 20px;">
+                    <h2 style="margin-top: 0;">投稿タイプを選択</h2>
+                    
+                    <?php foreach ($post_types as $post_type): ?>
+                        <?php
+                        // SQLクエリで直接カウント（meta_queryの警告を回避）
+                        global $wpdb;
+                        
+                        // 投稿数をカウント（サムネイルがない投稿のみ）
+                        $count = $wpdb->get_var($wpdb->prepare("
+                            SELECT COUNT(DISTINCT p.ID)
+                            FROM {$wpdb->posts} p
+                            LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_thumbnail_id'
+                            WHERE p.post_type = %s 
+                            AND p.post_status = 'publish'
+                            AND (pm.meta_value IS NULL OR pm.meta_value = '')
+                        ", $post_type->name));
+                        
+                    // プラグインで生成したサムネイルの数をカウント
+                    $count_generated = $wpdb->get_var($wpdb->prepare("
+                        SELECT COUNT(DISTINCT p.ID)
+                        FROM {$wpdb->posts} p
+                        INNER JOIN {$wpdb->postmeta} pm1 ON p.ID = pm1.post_id AND pm1.meta_key = '_thumbnail_id'
+                        INNER JOIN {$wpdb->postmeta} pm2 ON pm1.meta_value = pm2.post_id AND pm2.meta_key = '_amig_generated' AND pm2.meta_value = '1'
+                        WHERE p.post_type = %s AND p.post_status = 'publish'
+                    ", $post_type->name));
+                    
+                    // サムネイルが設定されている投稿数をカウント（全体）
+                    $count_with_thumbnail = $wpdb->get_var($wpdb->prepare("
+                        SELECT COUNT(DISTINCT p.ID)
+                        FROM {$wpdb->posts} p
+                        INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_thumbnail_id'
+                        WHERE p.post_type = %s 
+                        AND p.post_status = 'publish'
+                        AND pm.meta_value IS NOT NULL 
+                        AND pm.meta_value != ''
+                    ", $post_type->name));
+                    ?>
+                    
+                    <div style="background: #f9f9f9; border: 1px solid #e0e0e0; padding: 20px; border-radius: 6px; margin-bottom: 15px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+                            <div style="flex: 1; min-width: 200px;">
+                                <h3 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px;">
+                                    <span class="dashicons dashicons-admin-post" style="font-size: 20px; width: 20px; height: 20px;"></span>
+                                    <?php echo esc_html($post_type->label); ?>
+                                </h3>
+                                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                                    <p style="margin: 0; color: #666; font-size: 14px;">
+                                        サムネイル未設定: <strong><?php echo $count; ?></strong> 件
+                                    </p>
+                                    <p style="margin: 0; color: #2c7d2f; font-size: 14px;">
+                                        サムネイル設定済: <strong><?php echo $count_with_thumbnail; ?></strong> 件
+                                    </p>
+                                    <p style="margin: 0; color: #4A90E2; font-size: 14px;">
+                                        プラグイン生成: <strong><?php echo $count_generated; ?></strong> 件
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <?php if ($count > 0): ?>
+                                    <button type="button" 
+                                            class="button button-primary amig-bulk-generate-btn" 
+                                            data-post-type="<?php echo esc_attr($post_type->name); ?>"
+                                            data-count="<?php echo $count; ?>"
+                                            style="display: inline-flex; align-items: center; gap: 6px;">
+                                        <span class="dashicons dashicons-images-alt2" style="font-size: 16px; width: 16px; height: 16px;"></span>
+                                        一括生成
+                                    </button>
+                                <?php endif; ?>
+                                
+                                <?php if ($count_generated > 0): ?>
+                                    <button type="button" 
+                                            class="button button-secondary amig-bulk-delete-btn" 
+                                            data-post-type="<?php echo esc_attr($post_type->name); ?>"
+                                            data-count="<?php echo $count_generated; ?>"
+                                            style="display: inline-flex; align-items: center; gap: 6px; color: #dc3232; border-color: #dc3232;">
+                                        <span class="dashicons dashicons-trash" style="font-size: 16px; width: 16px; height: 16px;"></span>
+                                        一括削除
+                                    </button>
+                                <?php endif; ?>
+                                
+                                <?php if ($count == 0 && $count_with_thumbnail == 0): ?>
+                                    <span style="color: #666; font-style: italic;">投稿がありません</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        
+                        <div class="amig-bulk-progress" data-post-type="<?php echo esc_attr($post_type->name); ?>" style="display: none; margin-top: 15px;">
+                            <div style="background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin-bottom: 10px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span class="amig-progress-text">処理中...</span>
+                                    <span class="amig-progress-count">0 / <?php echo $count; ?></span>
+                                </div>
+                                <div style="background: #f0f0f1; height: 24px; border-radius: 4px; overflow: hidden;">
+                                    <div class="amig-progress-bar" style="background: linear-gradient(90deg, #4A90E2 0%, #357ABD 100%); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+                                </div>
+                            </div>
+                            <div class="amig-progress-log" style="max-height: 200px; overflow-y: auto; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 12px;"></div>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                
+                <div class="notice notice-info" style="margin-top: 20px;">
+                    <p><strong>一括生成について:</strong></p>
+                    <ul style="margin: 10px 0;">
+                        <li>既にサムネイルが設定されている投稿には画像を生成しません。</li>
+                        <li>処理中はブラウザを閉じないでください。</li>
+                        <li>多数の投稿がある場合、処理に時間がかかる場合があります。</li>
+                    </ul>
+                </div>
+                
+                <div class="notice notice-warning" style="margin-top: 20px;">
+                    <p><strong>⚠️ 一括削除について:</strong></p>
+                    <ul style="margin: 10px 0;">
+                        <li><strong>一括削除は、このプラグインで生成したサムネイル画像のみを削除します。</strong></li>
+                        <li>手動でアップロードした既存のサムネイル画像は削除されません。</li>
+                        <li>削除された画像はメディアライブラリからも完全に削除されます。</li>
+                        <li>この操作は取り消すことができません。実行前に必ずバックアップを取ることをお勧めします。</li>
+                    </ul>
+                </div>
+                
+                <div class="notice notice-info" style="margin-top: 20px;">
+                    <p><strong>💡 スキップされた投稿について:</strong></p>
+                    <p>画像生成に失敗した投稿は自動的にスキップされます。エラーを修正した後、以下のボタンでスキップ状態をクリアできます。</p>
+                    <button type="button" id="amig-clear-skipped" class="button" style="margin-top: 10px;">
+                        <span class="dashicons dashicons-update" style="margin-top: 3px;"></span> スキップ済みをクリア
+                    </button>
+                </div>
+        
+                <script type="text/javascript">
+                // ajaxurlが定義されていない場合のために定義
+                var ajaxurl = ajaxurl || '<?php echo admin_url('admin-ajax.php'); ?>';
+                
+                jQuery(document).ready(function($) {
+                    console.log('一括生成スクリプト読み込み完了. ajaxurl:', ajaxurl);
+                    
+            // スキップ済みをクリアするボタン
+            $('#amig-clear-skipped').on('click', function() {
+                const btn = $(this);
+                if (!confirm('スキップ済みの投稿をクリアしますか？\n\n次回の一括生成で、これらの投稿も処理対象になります。')) {
+                    return;
+                }
+                
+                btn.prop('disabled', true).html('<span class="spinner is-active" style="float: none; margin: 0 5px 0 0;"></span>処理中...');
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'amig_clear_skipped',
+                        nonce: '<?php echo wp_create_nonce('amig_clear_skipped'); ?>'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            alert('スキップ済みの投稿をクリアしました。\n削除件数: ' + response.data.count);
+                            location.reload();
+                        } else {
+                            alert('エラー: ' + response.data);
+                            btn.prop('disabled', false).html('<span class="dashicons dashicons-update" style="margin-top: 3px;"></span> スキップ済みをクリア');
+                        }
+                    },
+                    error: function() {
+                        alert('通信エラーが発生しました');
+                        btn.prop('disabled', false).html('<span class="dashicons dashicons-update" style="margin-top: 3px;"></span> スキップ済みをクリア');
+                    }
+                });
+            });
+            
+            $('.amig-bulk-generate-btn').on('click', function() {
+                const btn = $(this);
+                const postType = btn.data('post-type');
+                const totalCount = btn.data('count');
+                const progressContainer = $('.amig-bulk-progress[data-post-type="' + postType + '"]');
+                const progressBar = progressContainer.find('.amig-progress-bar');
+                const progressText = progressContainer.find('.amig-progress-text');
+                const progressCount = progressContainer.find('.amig-progress-count');
+                const progressLog = progressContainer.find('.amig-progress-log');
+                
+                btn.prop('disabled', true).html('<span class="spinner is-active" style="float: none; margin: 0 5px 0 0;"></span>処理中...');
+                progressContainer.show();
+                progressLog.empty();
+                
+                let processedCount = 0;
+                
+                console.log('一括生成開始:', {postType: postType, totalCount: totalCount});
+                
+                function processNext() {
+                    const requestData = {
+                        action: 'amig_bulk_generate',
+                        post_type: postType,
+                        nonce: '<?php echo wp_create_nonce('amig_bulk_generate'); ?>'
+                    };
+                    console.log('リクエスト送信:', requestData);
+                    
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        data: requestData,
+                        success: function(response) {
+                            console.log('レスポンス受信:', response);
+                            if (response.success) {
+                                const percentage = Math.round((processedCount / totalCount) * 100);
+                                
+                                progressBar.css('width', percentage + '%');
+                                
+                                if (response.data.post_id) {
+                                    processedCount++;
+                                    progressCount.text(processedCount + ' / ' + totalCount);
+                                    
+                                    if (response.data.skipped) {
+                                        progressLog.append('<div style="color: #d97706; margin-bottom: 3px;">⚠ ID: ' + response.data.post_id + ' - ' + response.data.post_title + ' (スキップ: ' + response.data.error + ')</div>');
+                                    } else {
+                                        progressLog.append('<div style="color: #2c7d2f; margin-bottom: 3px;">✓ ID: ' + response.data.post_id + ' - ' + response.data.post_title + '</div>');
+                                    }
+                                } else if (response.data.message) {
+                                    progressLog.append('<div style="color: #666; margin-bottom: 3px;">• ' + response.data.message + '</div>');
+                                }
+                                
+                                progressLog.scrollTop(progressLog[0].scrollHeight);
+                                
+                                if (response.data.continue && processedCount < totalCount) {
+                                    progressText.text('処理中... (' + processedCount + ' / ' + totalCount + ')');
+                                    setTimeout(processNext, 100); // 100msの遅延を追加
+                                } else {
+                                    progressText.html('<span style="color: #2c7d2f;">✓ 完了しました！</span>');
+                                    progressBar.css('width', '100%');
+                                    progressCount.text(totalCount + ' / ' + totalCount);
+                                    btn.prop('disabled', false).html('<span class="dashicons dashicons-images-alt2" style="font-size: 16px; width: 16px; height: 16px;"></span> 一括生成');
+                                    setTimeout(function() {
+                                        location.reload();
+                                    }, 2000);
+                                }
+                            } else {
+                                console.error('エラーレスポンス:', response);
+                                progressLog.append('<div style="color: #dc3232; margin-bottom: 3px;">✗ エラー: ' + (response.data || '不明なエラー') + '</div>');
+                                progressLog.scrollTop(progressLog[0].scrollHeight);
+                                progressText.html('<span style="color: #dc3232;">エラーが発生しました</span>');
+                                btn.prop('disabled', false).html('<span class="dashicons dashicons-images-alt2" style="font-size: 16px; width: 16px; height: 16px;"></span> 一括生成');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('AJAX Error:', xhr, status, error);
+                            let errorMsg = '通信エラーが発生しました';
+                            if (xhr.responseText) {
+                                try {
+                                    const response = JSON.parse(xhr.responseText);
+                                    if (response.data) {
+                                        errorMsg = response.data;
+                                    }
+                                } catch (e) {
+                                    errorMsg = '通信エラー: ' + xhr.status + ' ' + error;
+                                }
+                            }
+                            progressLog.append('<div style="color: #dc3232; margin-bottom: 3px;">✗ ' + errorMsg + '</div>');
+                            progressLog.scrollTop(progressLog[0].scrollHeight);
+                            progressText.html('<span style="color: #dc3232;">エラーが発生しました</span>');
+                            btn.prop('disabled', false).html('<span class="dashicons dashicons-images-alt2" style="font-size: 16px; width: 16px; height: 16px;"></span> 一括生成');
+                        }
+                    });
+                }
+                
+                processNext();
+            });
+            
+            // 一括削除ボタンのクリックイベント
+            $('.amig-bulk-delete-btn').on('click', function() {
+                const btn = $(this);
+                const postType = btn.data('post-type');
+                const totalCount = btn.data('count');
+                
+                if (!confirm('本当にこのプラグインで生成したサムネイル画像を削除しますか？\n\n対象: ' + totalCount + ' 件\n※手動でアップロードした既存のサムネイルは削除されません。\n\nこの操作は取り消せません。')) {
+                    return;
+                }
+                
+                const progressContainer = $('.amig-bulk-progress[data-post-type="' + postType + '"]');
+                const progressBar = progressContainer.find('.amig-progress-bar');
+                const progressText = progressContainer.find('.amig-progress-text');
+                const progressCount = progressContainer.find('.amig-progress-count');
+                const progressLog = progressContainer.find('.amig-progress-log');
+                
+                btn.prop('disabled', true).html('<span class="spinner is-active" style="float: none; margin: 0 5px 0 0;"></span>削除中...');
+                progressContainer.show();
+                progressLog.empty();
+                progressBar.css('background', 'linear-gradient(90deg, #dc3232 0%, #a00 100%)');
+                
+                let processedCount = 0;
+                
+                function processNext() {
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        data: {
+                            action: 'amig_bulk_delete',
+                            post_type: postType,
+                            nonce: '<?php echo wp_create_nonce('amig_bulk_delete'); ?>'
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                processedCount++;
+                                const percentage = Math.round((processedCount / totalCount) * 100);
+                                
+                                progressBar.css('width', percentage + '%');
+                                progressCount.text(processedCount + ' / ' + totalCount);
+                                
+                                if (response.data.skipped) {
+                                    // スキップされた場合（プラグイン生成画像でない）
+                                    progressLog.append('<div style="color: #f0ad4e; margin-bottom: 3px;">⊘ ID: ' + response.data.post_id + ' - ' + response.data.post_title + ' をスキップ（手動設定）</div>');
+                                } else if (response.data.post_id) {
+                                    progressLog.append('<div style="color: #dc3232; margin-bottom: 3px;">✓ ID: ' + response.data.post_id + ' - ' + response.data.post_title + ' のサムネイルを削除</div>');
+                                } else if (response.data.message) {
+                                    progressLog.append('<div style="color: #666; margin-bottom: 3px;">• ' + response.data.message + '</div>');
+                                }
+                                
+                                progressLog.scrollTop(progressLog[0].scrollHeight);
+                                
+                                if (response.data.continue) {
+                                    progressText.text('削除中... (' + processedCount + ' / ' + totalCount + ')');
+                                    processNext();
+                                } else {
+                                    progressText.html('<span style="color: #2c7d2f;">✓ 削除完了しました！</span>');
+                                    btn.prop('disabled', false).html('<span class="dashicons dashicons-trash" style="font-size: 16px; width: 16px; height: 16px;"></span> 一括削除');
+                                    setTimeout(function() {
+                                        location.reload();
+                                    }, 2000);
+                                }
+                            } else {
+                                progressLog.append('<div style="color: #dc3232; margin-bottom: 3px;">✗ エラー: ' + response.data + '</div>');
+                                progressLog.scrollTop(progressLog[0].scrollHeight);
+                                progressText.html('<span style="color: #dc3232;">エラーが発生しました</span>');
+                                btn.prop('disabled', false).html('<span class="dashicons dashicons-trash" style="font-size: 16px; width: 16px; height: 16px;"></span> 一括削除');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('AJAX Error:', xhr, status, error);
+                            let errorMsg = '通信エラーが発生しました';
+                            if (xhr.responseText) {
+                                try {
+                                    const response = JSON.parse(xhr.responseText);
+                                    if (response.data) {
+                                        errorMsg = response.data;
+                                    }
+                                } catch (e) {
+                                    errorMsg = '通信エラー: ' + xhr.status + ' ' + error;
+                                }
+                            }
+                            progressLog.append('<div style="color: #dc3232; margin-bottom: 3px;">✗ ' + errorMsg + '</div>');
+                            progressLog.scrollTop(progressLog[0].scrollHeight);
+                            progressText.html('<span style="color: #dc3232;">エラーが発生しました</span>');
+                            btn.prop('disabled', false).html('<span class="dashicons dashicons-trash" style="font-size: 16px; width: 16px; height: 16px;"></span> 一括削除');
+                        }
+                    });
+                }
+                
+                processNext();
+            });
+        });
+        </script>
+        
+        </div>
+        <?php
+    }
+    
+    /**
+     * 生成済み画像管理ページの表示
+     */
+    public function manage_images_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die('このページにアクセスする権限がありません。');
+        }
+        
+        // 公開されている投稿タイプを取得
+        $post_types = get_post_types(array('public' => true), 'objects');
+        
+        ?>
+        <div class="wrap">
+            <h1>生成済み画像管理</h1>
+            <p>プラグインで生成したサムネイル画像を一覧表示し、個別に削除できます。</p>
+            
+            <div style="background: #fff; border: 1px solid #ccd0d4; padding: 20px; border-radius: 4px; box-shadow: 0 1px 1px rgba(0,0,0,.04); margin-top: 20px;">
+                <h2 style="margin-top: 0;">投稿タイプを選択</h2>
+                
+                <?php foreach ($post_types as $post_type): ?>
+                <?php
+                global $wpdb;
+                
+                // プラグインで生成したサムネイルを持つ投稿を取得
+                $posts_with_generated_images = $wpdb->get_results($wpdb->prepare("
+                    SELECT DISTINCT p.ID, p.post_title, pm1.meta_value as thumbnail_id, pm3.meta_value as generated_date
+                        FROM {$wpdb->posts} p
+                        INNER JOIN {$wpdb->postmeta} pm1 ON p.ID = pm1.post_id AND pm1.meta_key = '_thumbnail_id'
+                        INNER JOIN {$wpdb->postmeta} pm2 ON pm1.meta_value = pm2.post_id AND pm2.meta_key = '_amig_generated' AND pm2.meta_value = '1'
+                        LEFT JOIN {$wpdb->postmeta} pm3 ON pm1.meta_value = pm3.post_id AND pm3.meta_key = '_amig_generated_date'
+                        WHERE p.post_type = %s AND p.post_status = 'publish'
+                        ORDER BY p.ID DESC
+                        LIMIT 100
+                    ", $post_type->name));
+                    
+                    $count = count($posts_with_generated_images);
+                    ?>
+                    
+                    <?php if ($count > 0): ?>
+                        <div style="background: #f9f9f9; border: 1px solid #e0e0e0; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+                            <h3 style="margin: 0 0 15px 0; display: flex; align-items: center; gap: 8px;">
+                                <span class="dashicons dashicons-admin-post" style="font-size: 20px;"></span>
+                                <?php echo esc_html($post_type->label); ?>
+                                <span style="background: #4A90E2; color: white; padding: 2px 8px; border-radius: 3px; font-size: 12px; font-weight: normal;">
+                                    <?php echo $count; ?> 件
+                                </span>
+                            </h3>
+                            
+                            <div style="margin-bottom: 10px;">
+                                <button type="button" class="button amig-select-all-btn" data-post-type="<?php echo esc_attr($post_type->name); ?>">
+                                    すべて選択
+                                </button>
+                                <button type="button" class="button amig-deselect-all-btn" data-post-type="<?php echo esc_attr($post_type->name); ?>">
+                                    すべて解除
+                                </button>
+                                <button type="button" class="button button-primary amig-delete-selected-btn" data-post-type="<?php echo esc_attr($post_type->name); ?>" style="margin-left: 10px; background: #dc3232; border-color: #dc3232;">
+                                    <span class="dashicons dashicons-trash" style="margin-top: 3px;"></span> 選択項目を削除
+                                </button>
+                            </div>
+                            
+                            <div class="amig-generated-list" data-post-type="<?php echo esc_attr($post_type->name); ?>" style="max-height: 500px; overflow-y: auto; background: white; border: 1px solid #ddd; border-radius: 4px;">
+                                <table class="wp-list-table widefat fixed striped" style="margin: 0;">
+                                    <thead>
+                                        <tr>
+                                            <td class="check-column" style="padding: 8px 10px;">
+                                                <input type="checkbox" class="amig-select-all-checkbox" data-post-type="<?php echo esc_attr($post_type->name); ?>">
+                                            </td>
+                                            <th style="padding: 8px 10px;">ID</th>
+                                            <th style="padding: 8px 10px;">サムネイル</th>
+                                            <th style="padding: 8px 10px;">タイトル</th>
+                                            <th style="padding: 8px 10px;">生成日時</th>
+                                            <th style="padding: 8px 10px;">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($posts_with_generated_images as $post_item): ?>
+                                            <tr data-post-id="<?php echo esc_attr($post_item->ID); ?>">
+                                                <th class="check-column" style="padding: 8px 10px;">
+                                                    <input type="checkbox" class="amig-post-checkbox" value="<?php echo esc_attr($post_item->ID); ?>" data-post-type="<?php echo esc_attr($post_type->name); ?>">
+                                                </th>
+                                                <td style="padding: 8px 10px;"><?php echo esc_html($post_item->ID); ?></td>
+                                                <td style="padding: 8px 10px;">
+                                                    <?php 
+                                                    $thumbnail_url = wp_get_attachment_image_url($post_item->thumbnail_id, 'thumbnail');
+                                                    if ($thumbnail_url): 
+                                                    ?>
+                                                        <img src="<?php echo esc_url($thumbnail_url); ?>" style="max-width: 60px; height: auto; border-radius: 3px;">
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td style="padding: 8px 10px;">
+                                                    <a href="<?php echo get_edit_post_link($post_item->ID); ?>" target="_blank">
+                                                        <?php echo esc_html($post_item->post_title); ?>
+                                                    </a>
+                                                </td>
+                                                <td style="padding: 8px 10px;">
+                                                    <?php 
+                                                    if ($post_item->generated_date) {
+                                                        echo esc_html(mysql2date('Y/m/d H:i', $post_item->generated_date));
+                                                    } else {
+                                                        echo '-';
+                                                    }
+                                                    ?>
+                                                </td>
+                                                <td style="padding: 8px 10px;">
+                                                    <button type="button" class="button button-small amig-delete-single-btn" 
+                                                            data-post-id="<?php echo esc_attr($post_item->ID); ?>"
+                                                            data-post-title="<?php echo esc_attr($post_item->post_title); ?>"
+                                                            style="color: #dc3232;">
+                                                        削除
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+                
+                <script type="text/javascript">
+                var ajaxurl = ajaxurl || '<?php echo admin_url('admin-ajax.php'); ?>';
+                
+                jQuery(document).ready(function($) {
+                    // すべて選択
+                    $('.amig-select-all-btn').on('click', function() {
+                        const postType = $(this).data('post-type');
+                        $('.amig-post-checkbox[data-post-type="' + postType + '"]').prop('checked', true);
+                        $('.amig-select-all-checkbox[data-post-type="' + postType + '"]').prop('checked', true);
+                });
+                
+                // すべて解除
+                $('.amig-deselect-all-btn').on('click', function() {
+                    const postType = $(this).data('post-type');
+                    $('.amig-post-checkbox[data-post-type="' + postType + '"]').prop('checked', false);
+                    $('.amig-select-all-checkbox[data-post-type="' + postType + '"]').prop('checked', false);
+                });
+                
+                // ヘッダーのチェックボックス
+                $('.amig-select-all-checkbox').on('change', function() {
+                    const postType = $(this).data('post-type');
+                    const isChecked = $(this).prop('checked');
+                    $('.amig-post-checkbox[data-post-type="' + postType + '"]').prop('checked', isChecked);
+                });
+                
+                // 個別削除
+                $('.amig-delete-single-btn').on('click', function() {
+                    const btn = $(this);
+                    const postId = btn.data('post-id');
+                    const postTitle = btn.data('post-title');
+                    
+                    if (!confirm('「' + postTitle + '」のサムネイル画像を削除しますか？\n\nこの操作は取り消せません。')) {
+                        return;
+                    }
+                    
+                    btn.prop('disabled', true).text('削除中...');
+                    
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        data: {
+                            action: 'amig_delete_single',
+                            post_id: postId,
+                            nonce: '<?php echo wp_create_nonce('amig_delete_single'); ?>'
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                $('tr[data-post-id="' + postId + '"]').fadeOut(300, function() {
+                                    $(this).remove();
+                                });
+                                alert('削除しました');
+                            } else {
+                                alert('エラー: ' + (response.data || '削除に失敗しました'));
+                                btn.prop('disabled', false).text('削除');
+                            }
+                        },
+                        error: function() {
+                            alert('通信エラーが発生しました');
+                            btn.prop('disabled', false).text('削除');
+                        }
+                    });
+                });
+                
+                // 選択項目を削除
+                $('.amig-delete-selected-btn').on('click', function() {
+                    const btn = $(this);
+                    const postType = btn.data('post-type');
+                    const checkedBoxes = $('.amig-post-checkbox[data-post-type="' + postType + '"]:checked');
+                    const postIds = checkedBoxes.map(function() { return $(this).val(); }).get();
+                    
+                    if (postIds.length === 0) {
+                        alert('削除する投稿を選択してください');
+                        return;
+                    }
+                    
+                    if (!confirm(postIds.length + ' 件のサムネイル画像を削除しますか？\n\nこの操作は取り消せません。')) {
+                        return;
+                    }
+                    
+                    btn.prop('disabled', true).html('<span class="spinner is-active" style="float: none; margin: 0 5px 0 0;"></span>削除中...');
+                    
+                    let deletedCount = 0;
+                    
+                    function deleteNext(index) {
+                        if (index >= postIds.length) {
+                            alert(deletedCount + ' 件削除しました');
+                            btn.prop('disabled', false).html('<span class="dashicons dashicons-trash" style="margin-top: 3px;"></span> 選択項目を削除');
+                            location.reload();
+                            return;
+                        }
+                        
+                        const postId = postIds[index];
+                        
+                        $.ajax({
+                            url: ajaxurl,
+                            type: 'POST',
+                            data: {
+                                action: 'amig_delete_single',
+                                post_id: postId,
+                                nonce: '<?php echo wp_create_nonce('amig_delete_single'); ?>'
+                            },
+                            success: function(response) {
+                                if (response.success) {
+                                    deletedCount++;
+                                    $('tr[data-post-id="' + postId + '"]').fadeOut(200);
+                                }
+                                deleteNext(index + 1);
+                            },
+                            error: function() {
+                                deleteNext(index + 1);
+                            }
+                        });
+                    }
+                    
+                    deleteNext(0);
+                });
+            });
+            </script>
+        
+        </div>
+        <?php
+    }
+    
+    /**
+     * 一括画像生成のAJAXハンドラー
+     */
+    public function ajax_bulk_generate() {
+        try {
+            error_log('AMIG Bulk Generate: Start');
+            error_log('POST data: ' . print_r($_POST, true));
+            
+            // nonce検証
+            if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'amig_bulk_generate')) {
+                error_log('AMIG Bulk Generate: Nonce verification failed');
+                wp_send_json_error('セキュリティチェックに失敗しました');
+            }
+            
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error('権限がありません');
+            }
+            
+            $post_type = isset($_POST['post_type']) ? sanitize_text_field($_POST['post_type']) : '';
+            
+            if (empty($post_type)) {
+                wp_send_json_error('投稿タイプが指定されていません');
+            }
+            
+            // サムネイルがない投稿を1件取得
+            // WordPress 6.x では meta_query の構造に注意が必要
+            global $wpdb;
+            
+            // サムネイルがない、かつ生成失敗していない投稿IDを取得
+            $post_id = $wpdb->get_var($wpdb->prepare("
+                SELECT p.ID
+                FROM {$wpdb->posts} p
+                LEFT JOIN {$wpdb->postmeta} pm_thumb ON p.ID = pm_thumb.post_id AND pm_thumb.meta_key = '_thumbnail_id'
+                LEFT JOIN {$wpdb->postmeta} pm_failed ON p.ID = pm_failed.post_id AND pm_failed.meta_key = '_amig_generation_failed'
+                WHERE p.post_type = %s 
+                AND p.post_status = 'publish'
+                AND (pm_thumb.meta_value IS NULL OR pm_thumb.meta_value = '')
+                AND pm_failed.meta_id IS NULL
+                ORDER BY p.ID ASC
+                LIMIT 1
+            ", $post_type));
+            
+            error_log('AMIG Bulk Generate: Found post ID: ' . ($post_id ? $post_id : 'none'));
+            
+            if (!$post_id) {
+                error_log('AMIG Bulk Generate: No more posts to process');
+                wp_send_json_success(array(
+                    'continue' => false,
+                    'message' => 'すべての投稿の処理が完了しました'
+                ));
+            }
+            
+            $post = get_post($post_id);
+            
+            error_log('AMIG Bulk Generate: Processing post ID: ' . $post->ID . ', Title: ' . $post->post_title);
+            
+            // 現在のサムネイル状態を確認
+            $has_thumbnail_before = has_post_thumbnail($post->ID);
+            error_log('AMIG Bulk Generate: Has thumbnail before: ' . ($has_thumbnail_before ? 'yes' : 'no'));
+            
+            // 画像を生成
+            $thumbnail_id = $this->generate_thumbnail_image($post->ID);
+            
+            error_log('AMIG Bulk Generate: Generated thumbnail ID: ' . ($thumbnail_id ? $thumbnail_id : 'false'));
+            
+            // 生成後のサムネイル状態を確認
+            $has_thumbnail_after = has_post_thumbnail($post->ID);
+            error_log('AMIG Bulk Generate: Has thumbnail after: ' . ($has_thumbnail_after ? 'yes' : 'no'));
+            
+            if ($thumbnail_id && $thumbnail_id !== false) {
+                error_log('AMIG Bulk Generate: Success for post ' . $post->ID);
+                wp_send_json_success(array(
+                    'continue' => true,
+                    'post_id' => $post->ID,
+                    'post_title' => $post->post_title,
+                    'thumbnail_id' => $thumbnail_id
+                ));
+            } else {
+                // 失敗した場合は、その投稿に「スキップ済み」フラグを設定して次へ進む
+                error_log('AMIG Bulk Generate: Failed to generate thumbnail for post ' . $post->ID . ', marking as skipped and continuing...');
+                
+                // 一時的なメタデータを設定して、次回のクエリでこの投稿がスキップされるようにする
+                update_post_meta($post->ID, '_amig_generation_failed', current_time('mysql'));
+                
+                wp_send_json_success(array(
+                    'continue' => true,
+                    'post_id' => $post->ID,
+                    'post_title' => $post->post_title,
+                    'error' => '画像生成に失敗（スキップ）',
+                    'skipped' => true
+                ));
+            }
+        } catch (Exception $e) {
+            error_log('Automagic Bulk Generate Error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            wp_send_json_error('エラーが発生しました: ' . $e->getMessage());
+        } catch (Error $e) {
+            error_log('Automagic Bulk Generate Fatal Error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            wp_send_json_error('致命的なエラーが発生しました: ' . $e->getMessage());
+        }
+    }    /**
+     * 一括画像削除のAJAXハンドラー
+     */
+    public function ajax_bulk_delete() {
+        try {
+            error_log('AMIG Bulk Delete: Start');
+            
+            // nonce検証
+            if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'amig_bulk_delete')) {
+                error_log('AMIG Bulk Delete: Nonce verification failed');
+                wp_send_json_error('セキュリティチェックに失敗しました');
+            }
+            
+            if (!current_user_can('manage_options')) {
+                error_log('AMIG Bulk Delete: Permission denied');
+                wp_send_json_error('権限がありません');
+            }
+            
+            $post_type = isset($_POST['post_type']) ? sanitize_text_field($_POST['post_type']) : '';
+            error_log('AMIG Bulk Delete: Post type = ' . $post_type);
+            
+            if (empty($post_type)) {
+                error_log('AMIG Bulk Delete: Post type is empty');
+                wp_send_json_error('投稿タイプが指定されていません');
+            }
+            
+            // プラグインで生成したサムネイルがある投稿を1件取得
+            global $wpdb;
+            $post_id = $wpdb->get_var($wpdb->prepare("
+                SELECT DISTINCT p.ID
+                FROM {$wpdb->posts} p
+                INNER JOIN {$wpdb->postmeta} pm1 ON p.ID = pm1.post_id AND pm1.meta_key = '_thumbnail_id'
+                INNER JOIN {$wpdb->postmeta} pm2 ON pm1.meta_value = pm2.post_id AND pm2.meta_key = '_amig_generated' AND pm2.meta_value = '1'
+                WHERE p.post_type = %s AND p.post_status = 'publish'
+                LIMIT 1
+            ", $post_type));
+            
+            error_log('AMIG Bulk Delete: Found post ID: ' . ($post_id ? $post_id : 'none'));
+            
+            if (!$post_id) {
+                error_log('AMIG Bulk Delete: No more posts to process');
+                wp_send_json_success(array(
+                    'continue' => false,
+                    'message' => 'すべてのサムネイルの削除が完了しました'
+                ));
+            }
+            
+            $post = get_post($post_id);
+            
+            error_log('AMIG Bulk Delete: Processing post ID: ' . $post->ID);
+            
+            // サムネイルIDを取得
+            $thumbnail_id = get_post_thumbnail_id($post->ID);
+            
+            error_log('AMIG Bulk Delete: Thumbnail ID: ' . $thumbnail_id);
+            
+            // このプラグインで生成した画像かチェック（既にクエリで確認済みだが念のため）
+            $is_amig_generated = get_post_meta($thumbnail_id, '_amig_generated', true);
+            
+            if ($thumbnail_id && $is_amig_generated === '1') {
+                // プラグインで生成した画像を削除
+                // 投稿からサムネイルの関連付けを削除
+                delete_post_meta($post->ID, '_thumbnail_id');
+                
+                // メディアファイルも削除
+                wp_delete_attachment($thumbnail_id, true);
+                
+                error_log('AMIG Bulk Delete: Success for post ' . $post->ID);
+                wp_send_json_success(array(
+                    'continue' => true,
+                    'post_id' => $post->ID,
+                    'post_title' => $post->post_title,
+                    'thumbnail_id' => $thumbnail_id
+                ));
+            } else {
+                // 念のため：プラグインで生成した画像でない場合
+                error_log('AMIG Bulk Delete: Skipping post ' . $post->ID . ' (not generated by plugin)');
+                wp_send_json_success(array(
+                    'continue' => true,
+                    'post_id' => $post->ID,
+                    'post_title' => $post->post_title,
+                    'skipped' => true,
+                    'error' => 'プラグイン生成画像ではないためスキップ'
+                ));
+            }
+        } catch (Exception $e) {
+            error_log('Automagic Bulk Delete Error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            wp_send_json_error('エラーが発生しました: ' . $e->getMessage());
+        } catch (Error $e) {
+            error_log('Automagic Bulk Delete Fatal Error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            wp_send_json_error('致命的なエラーが発生しました: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * 個別削除のAJAXハンドラー
+     */
+    public function ajax_delete_single() {
+        try {
+            error_log('AMIG Delete Single: Start');
+            
+            // nonce検証
+            if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'amig_delete_single')) {
+                error_log('AMIG Delete Single: Nonce verification failed');
+                wp_send_json_error('セキュリティチェックに失敗しました');
+            }
+            
+            if (!current_user_can('manage_options')) {
+                error_log('AMIG Delete Single: Permission denied');
+                wp_send_json_error('権限がありません');
+            }
+            
+            $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+            error_log('AMIG Delete Single: Post ID = ' . $post_id);
+            
+            if (empty($post_id)) {
+                error_log('AMIG Delete Single: Post ID is empty');
+                wp_send_json_error('投稿IDが指定されていません');
+            }
+            
+            // サムネイルIDを取得
+            $thumbnail_id = get_post_thumbnail_id($post_id);
+            
+            if (!$thumbnail_id) {
+                error_log('AMIG Delete Single: No thumbnail found for post ' . $post_id);
+                wp_send_json_error('サムネイルが見つかりません');
+            }
+            
+            error_log('AMIG Delete Single: Thumbnail ID: ' . $thumbnail_id);
+            
+            // このプラグインで生成した画像かチェック
+            $is_amig_generated = get_post_meta($thumbnail_id, '_amig_generated', true);
+            
+            if ($is_amig_generated !== '1') {
+                error_log('AMIG Delete Single: Not a plugin-generated image');
+                wp_send_json_error('この画像はプラグインで生成されたものではありません');
+            }
+            
+            // 投稿からサムネイルの関連付けを削除
+            delete_post_meta($post_id, '_thumbnail_id');
+            
+            // メディアファイルも削除
+            $deleted = wp_delete_attachment($thumbnail_id, true);
+            
+            if ($deleted) {
+                error_log('AMIG Delete Single: Success for post ' . $post_id);
+                wp_send_json_success(array(
+                    'post_id' => $post_id,
+                    'thumbnail_id' => $thumbnail_id
+                ));
+            } else {
+                error_log('AMIG Delete Single: Failed to delete attachment ' . $thumbnail_id);
+                wp_send_json_error('画像の削除に失敗しました');
+            }
+        } catch (Exception $e) {
+            error_log('AMIG Delete Single Error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            wp_send_json_error('エラーが発生しました: ' . $e->getMessage());
+        } catch (Error $e) {
+            error_log('AMIG Delete Single Fatal Error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            wp_send_json_error('致命的なエラーが発生しました: ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * スキップ済みフラグをクリアするAJAXハンドラー
+     */
+    public function ajax_clear_skipped() {
+        try {
+            // nonce検証
+            if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'amig_clear_skipped')) {
+                wp_send_json_error('セキュリティチェックに失敗しました');
+            }
+            
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error('権限がありません');
+            }
+            
+            global $wpdb;
+            
+            // _amig_generation_failed メタを削除
+            $result = $wpdb->query(
+                "DELETE FROM {$wpdb->postmeta} WHERE meta_key = '_amig_generation_failed'"
+            );
+            
+            error_log('AMIG Clear Skipped: Cleared ' . $result . ' records');
+            
+            wp_send_json_success(array(
+                'count' => $result
+            ));
+            
+        } catch (Exception $e) {
+            error_log('AMIG Clear Skipped Error: ' . $e->getMessage());
+            wp_send_json_error('エラーが発生しました: ' . $e->getMessage());
+        }
     }
 }
 
