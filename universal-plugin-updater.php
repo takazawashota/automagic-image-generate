@@ -310,9 +310,9 @@ class Universal_Plugin_Updater {
      */
     public function add_license_page() {
         add_submenu_page(
-            'options-general.php',
+            $this->config['plugin_slug'],          // 親メニューのスラッグ
             $this->config['plugin_name'] . ' ライセンス設定',
-            'ライセンス',
+            'ライセンス認証',
             'manage_options',
             $this->config['license_page_slug'],
             array($this, 'license_page')
@@ -498,7 +498,7 @@ class Universal_Plugin_Updater {
                     <form method="post" style="margin-bottom: 15px;">
                         <?php wp_nonce_field($this->config['nonce_deactivate_action']); ?>
                         <p>
-                            <strong>現在のライセンスキー:</strong><br>
+                            <strong style="display:block; margin-bottom:6px;">現在のライセンスキー</strong>
                             <code style="background: #f5f5f5; padding: 5px 10px; display: inline-block; margin-top: 5px;">
                                 <?php echo esc_html($this->mask_license_key($this->license_key)); ?>
                             </code>
@@ -513,7 +513,7 @@ class Universal_Plugin_Updater {
                     <form method="post" style="border-top: 1px solid #ddd; padding-top: 15px;">
                         <?php wp_nonce_field($this->config['nonce_check_action']); ?>
                         <p style="margin-bottom: 10px;">
-                            <strong>ライセンス状態の確認</strong><br>
+                            <strong style="display:block; margin-bottom:6px;">ライセンス状態の確認</strong>
                             <span style="font-size: 13px; color: #666;">
                                 サーバーに接続して、ライセンスが引き続き有効かどうかを確認します。
                             </span>

@@ -85,41 +85,4 @@ jQuery(document).ready(function ($) {
             }
         });
     });
-
-    // 手動生成
-    $('#amig-generate-btn').on('click', function () {
-        var postId = $('#amig-post-id').val();
-        var $btn = $(this);
-        var $status = $('#amig-status');
-
-        if (!postId || postId < 1) {
-            $status.text('有効な投稿IDを入力してください').css('color', 'red');
-            return;
-        }
-
-        $btn.prop('disabled', true);
-        $status.text('生成中...').css('color', 'blue');
-
-        $.ajax({
-            url: amigAjax.ajax_url,
-            type: 'POST',
-            data: {
-                action: 'amig_manual_generate',
-                post_id: postId,
-                nonce: amigAjax.nonce
-            },
-            success: function (response) {
-                if (response.success) {
-                    $status.text(response.data).css('color', 'green');
-                } else {
-                    $status.text('エラー: ' + response.data).css('color', 'red');
-                }
-                $btn.prop('disabled', false);
-            },
-            error: function () {
-                $status.text('通信エラーが発生しました').css('color', 'red');
-                $btn.prop('disabled', false);
-            }
-        });
-    });
 });

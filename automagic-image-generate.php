@@ -62,12 +62,25 @@ class Automagic_Image_Generate {
      * 管理画面メニューの追加
      */
     public function add_admin_menu() {
-        add_options_page(
-            'Automagic Image Generate 設定',
-            'Automagic Image Generate',
-            'manage_options',
-            'automagic-image-generate',
-            array($this, 'settings_page')
+        // トップレベルメニューを追加
+        add_menu_page(
+            'Automagic Image Generate',           // ページタイトル
+            'Automagic Image Generate',           // メニュータイトル
+            'manage_options',                     // 権限
+            'automagic-image-generate',           // メニュースラッグ
+            array($this, 'settings_page'),        // コールバック関数
+            'dashicons-images-alt2',              // アイコン
+            3                                     // メニューの位置（3=ダッシュボードの下）
+        );
+        
+        // サブメニュー（設定）を追加（最初のサブメニューはメインと同じページ）
+        add_submenu_page(
+            'automagic-image-generate',           // 親メニューのスラッグ
+            'Automagic Image Generate 設定',      // ページタイトル
+            '設定',                                // メニュータイトル
+            'manage_options',                     // 権限
+            'automagic-image-generate',           // メニュースラッグ（親と同じ）
+            array($this, 'settings_page')         // コールバック関数
         );
     }
     
@@ -456,20 +469,43 @@ class Automagic_Image_Generate {
         
         // フォントの状態をチェック
         $font_path = $this->get_japanese_font_path();
-        $font_status = $font_path ? '<span style="color: green;">✓ 日本語フォントが見つかりました: ' . esc_html(basename($font_path)) . '</span>' : '<span style="color: red;">✗ 日本語フォントが見つかりません</span>';
         
         ?>
         <div class="wrap">
             <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
             
-            <div class="notice notice-info" style="padding: 10px; margin: 20px 0;">
-                <p><strong>システム状態:</strong></p>
-                <p><?php echo $font_status; ?></p>
-                <?php if (!$font_path): ?>
-                <p style="color: #666;">日本語を含むタイトルで画像を生成するには、日本語フォントが必要です。</p>
-                <p style="color: #666;">解決方法: <code><?php echo esc_html(AMIG_PLUGIN_DIR); ?>fonts/</code> ディレクトリに日本語フォント（例: NotoSansJP-Regular.ttf）を配置してください。</p>
-                <p style="color: #666;"><a href="https://fonts.google.com/noto/specimen/Noto+Sans+JP" target="_blank">Google Fonts - Noto Sans JP</a> からダウンロードできます。</p>
-                <?php endif; ?>
+            <!-- フォントファイルの状態 -->
+            <div class="notice <?php echo $font_path ? 'notice-success' : 'notice-warning'; ?>" style="padding: 15px; margin: 20px 0; border-left-width: 4px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <span style="font-size: 24px;">
+                        <?php echo $font_path ? '✓' : '⚠'; ?>
+                    </span>
+                    <div style="flex: 1;">
+                        <p style="margin: 0 0 5px 0; font-size: 15px; font-weight: 600;">
+                            <?php if ($font_path): ?>
+                                <span style="color: #2c7d2f;">日本語フォントが利用可能です</span>
+                            <?php else: ?>
+                                <span style="color: #d97706;">日本語フォントが見つかりません</span>
+                            <?php endif; ?>
+                        </p>
+                        
+                        <?php if ($font_path): ?>
+                            <p style="margin: 0; color: #666; font-size: 13px;">
+                                使用中のフォント: <code style="background: #f0f0f1; padding: 2px 6px; border-radius: 3px;"><?php echo esc_html(basename($font_path)); ?></code>
+                            </p>
+                        <?php else: ?>
+                            <p style="margin: 5px 0; color: #666; font-size: 13px; line-height: 1.6;">
+                                日本語を含むタイトルで画像を生成するには、日本語フォントが必要です。<br>
+                                <strong>フォント配置先:</strong> <code style="background: #f0f0f1; padding: 2px 6px; border-radius: 3px;"><?php echo esc_html(AMIG_PLUGIN_DIR); ?>fonts/</code>
+                            </p>
+                            <p style="margin: 10px 0 0 0;">
+                                <a href="https://fonts.google.com/noto/specimen/Noto+Sans+JP" target="_blank" class="button button-secondary" style="text-decoration: none;">
+                                    <span class="dashicons dashicons-download" style="margin-top: 3px;"></span> Google Fonts からダウンロード
+                                </a>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                </div>
             </div>
             
             <form action="options.php" method="post">
@@ -497,17 +533,6 @@ class Automagic_Image_Generate {
                     <p style="color: #666;">上のボタンをクリックして、現在の設定でプレビュー画像を生成します。</p>
                 </div>
             </div>
-            
-            <hr>
-            
-            <h2>手動で画像を生成</h2>
-            <p>既存の投稿に対して手動で画像を生成することもできます。</p>
-            <div id="amig-manual-generation">
-                <label for="amig-post-id">投稿ID:</label>
-                <input type="number" id="amig-post-id" min="1" />
-                <button type="button" id="amig-generate-btn" class="button button-secondary">画像を生成</button>
-                <span id="amig-status"></span>
-            </div>
 
             <?php
             // フォントマネージャーなど他の機能が表示できるようにフックを提供
@@ -521,7 +546,8 @@ class Automagic_Image_Generate {
      * 管理画面用スクリプトの読み込み
      */
     public function enqueue_admin_scripts($hook) {
-        if ('settings_page_automagic-image-generate' !== $hook) {
+        // トップレベルメニューのページスラッグに変更
+        if ('toplevel_page_automagic-image-generate' !== $hook) {
             return;
         }
         
@@ -1388,34 +1414,6 @@ function amig_preview_generate_callback() {
     } catch (Exception $e) {
         error_log('Automagic Image Generate Preview Error: ' . $e->getMessage());
         wp_send_json_error('エラーが発生しました: ' . $e->getMessage());
-    }
-}
-
-// AJAX処理（手動生成用）
-add_action('wp_ajax_amig_manual_generate', 'amig_manual_generate_callback');
-
-function amig_manual_generate_callback() {
-    check_ajax_referer('amig_generate_nonce', 'nonce');
-    
-    if (!current_user_can('edit_posts')) {
-        wp_send_json_error('権限がありません');
-    }
-    
-    $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
-    
-    if (!$post_id || !get_post($post_id)) {
-        wp_send_json_error('有効な投稿IDを指定してください');
-    }
-    
-    $instance = Automagic_Image_Generate::get_instance();
-    $method = new ReflectionMethod($instance, 'generate_and_set_thumbnail');
-    $method->setAccessible(true);
-    $result = $method->invoke($instance, $post_id);
-    
-    if ($result) {
-        wp_send_json_success('画像を生成してサムネイルに設定しました');
-    } else {
-        wp_send_json_error('画像の生成に失敗しました。ログを確認してください。');
     }
 }
 
