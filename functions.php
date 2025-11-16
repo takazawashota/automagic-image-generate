@@ -3077,6 +3077,10 @@ function sokulabo_login_form_shortcode() {
             }
         }
     </style>
+
+    <div class="sokulabo-login-logo">
+        <h1>速ラボ PRODUCTS</h1>
+    </div>
     
     <?php 
     // エラーメッセージの表示（フォームの外側・上部）
@@ -3103,10 +3107,6 @@ function sokulabo_login_form_shortcode() {
             <p style="margin: 0.5em 0; padding: 2px;"><?php echo wp_kses_post($error_msg); ?></p>
         </div>
     <?php endif; ?>
-    
-    <div class="sokulabo-login-logo">
-        <h1>速ラボ PRODUCTS</h1>
-    </div>
     
     <div class="sokulabo-login-form">
         <form method="post" action="<?php echo wp_login_url(); ?>">
