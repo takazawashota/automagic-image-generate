@@ -1642,7 +1642,7 @@ function sokulabo_mypage_shortcode() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                showMessage(data.data.message, 'success');
+                // 成功時はメッセージを表示せず、メールアドレスを更新して編集モードを閉じる
                 document.getElementById('emailDisplay').textContent = newEmail;
                 toggleEmailEdit();
             } else {
