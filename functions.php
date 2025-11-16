@@ -1296,6 +1296,16 @@ function sokulabo_mypage_shortcode() {
         .save-email-btn:hover {
             background: #16a34a;
         }
+        .email-error-message {
+            display: none;
+            color: #dc2626;
+            font-size: 12px;
+            margin-top: 8px;
+            line-height: 1.4;
+        }
+        .email-error-message.show {
+            display: block;
+        }
         .license-item {
             background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
             padding: 25px;
@@ -1499,6 +1509,166 @@ function sokulabo_mypage_shortcode() {
         .no-license p {
             margin-bottom: 20px;
         }
+        
+        /* レスポンシブ対応 */
+        @media (max-width: 768px) {
+            .sokulabo-mypage {
+                padding: 20px;
+                margin: 0 auto 30px;
+            }
+            
+            .account-info th {
+                width: 120px;
+                font-size: 13px;
+            }
+            
+            .account-info th,
+            .account-info td {
+                padding: 10px 8px;
+            }
+            
+            .license-item {
+                padding: 20px;
+            }
+            
+            .license-info {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .sokulabo-mypage {
+                padding: 15px;
+                border-radius: 0;
+            }
+            
+            .mypage-section h3 {
+                font-size: 18px;
+            }
+            
+            /* テーブルをカード型に変更 */
+            .account-info {
+                border: none;
+            }
+            
+            .account-info tr {
+                display: block;
+                margin-bottom: 15px;
+                border: 1px solid #eee;
+                border-radius: 6px;
+                overflow: hidden;
+            }
+            
+            .account-info th,
+            .account-info td {
+                display: block;
+                width: 100%;
+                padding: 12px 15px;
+                border: none;
+            }
+            
+            .account-info th {
+                background: #f5f5f5;
+                font-size: 12px;
+                color: #666;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            
+            .account-info td {
+                background: #fff;
+                font-size: 14px;
+            }
+            
+            /* メールアドレス編集フォームをモバイル対応 */
+            .email-edit-wrapper {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            
+            .email-display {
+                word-break: break-all;
+            }
+            
+            .edit-email-btn {
+                width: 100%;
+                padding: 8px 12px;
+            }
+            
+            .email-edit-form {
+                flex-direction: column;
+                width: 100%;
+                gap: 10px;
+            }
+            
+            .email-edit-form input[type="email"] {
+                width: 100%;
+            }
+            
+            .email-edit-form .save-email-btn,
+            .email-edit-form .cancel-edit-btn {
+                width: 100%;
+                padding: 10px;
+            }
+            
+            /* メッセージボックス */
+            .sokulabo-message {
+                padding: 15px;
+                gap: 10px;
+            }
+            
+            .sokulabo-message .message-icon {
+                width: 32px;
+                height: 32px;
+            }
+            
+            .sokulabo-message .message-icon .dashicons {
+                font-size: 20px;
+                width: 20px;
+                height: 20px;
+            }
+            
+            .sokulabo-message .message-content strong {
+                font-size: 14px;
+            }
+            
+            .sokulabo-message .message-content p {
+                font-size: 13px;
+            }
+            
+            /* ライセンス情報 */
+            .license-item {
+                padding: 15px;
+            }
+            
+            .license-key {
+                font-size: 14px;
+                padding: 0 12px;
+                height: 38px;
+                line-height: 36px;
+                word-break: break-all;
+            }
+            
+            .license-info {
+                gap: 10px;
+            }
+            
+            .license-info-item {
+                padding: 10px 12px;
+            }
+            
+            .site-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            
+            .site-url {
+                font-size: 13px;
+                word-break: break-all;
+            }
+        }
     </style>
 
     <div class="sokulabo-mypage">
@@ -1534,6 +1704,7 @@ function sokulabo_mypage_shortcode() {
                                 <button type="submit" class="save-email-btn" id="saveEmailBtn">保存</button>
                                 <button type="button" class="cancel-edit-btn" onclick="toggleEmailEdit()">キャンセル</button>
                             </form>
+                            <div class="email-error-message" id="emailErrorMessage"></div>
                         </td>
                     </tr>
                     <tr>
@@ -1594,11 +1765,15 @@ function sokulabo_mypage_shortcode() {
         const display = document.getElementById('emailDisplay');
         const form = document.getElementById('emailEditForm');
         const btn = document.querySelector('.edit-email-btn');
+        const errorMsg = document.getElementById('emailErrorMessage');
         
         if (form.classList.contains('active')) {
             form.classList.remove('active');
             display.style.display = 'inline';
             btn.style.display = 'inline-block';
+            // エラーメッセージを非表示
+            errorMsg.classList.remove('show');
+            errorMsg.textContent = '';
         } else {
             display.style.display = 'none';
             btn.style.display = 'none';
@@ -1613,17 +1788,25 @@ function sokulabo_mypage_shortcode() {
         const submitBtn = document.getElementById('saveEmailBtn');
         const newEmail = document.getElementById('newEmail').value.trim();
         const currentEmail = document.getElementById('emailDisplay').textContent;
+        const errorDiv = document.getElementById('emailErrorMessage');
         
-        // クライアント側で基本的なバリデーション
+        // 空欄の場合は編集モードを閉じる
         if (!newEmail) {
-            showMessage('メールアドレスを入力してください', 'error');
+            toggleEmailEdit();
             return;
         }
         
+        // 同じメールアドレスの場合は警告を表示
         if (newEmail.toLowerCase() === currentEmail.toLowerCase()) {
-            showMessage('現在と同じメールアドレスです', 'error');
+            errorDiv.textContent = '現在と同じメールアドレスです';
+            errorDiv.classList.add('show');
+            submitBtn.disabled = false;
             return;
         }
+        
+        // エラーメッセージをクリア
+        errorDiv.classList.remove('show');
+        errorDiv.textContent = '';
         
         // ボタンを無効化
         submitBtn.disabled = true;
@@ -1642,16 +1825,26 @@ function sokulabo_mypage_shortcode() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // 成功時はメッセージを表示せず、メールアドレスを更新して編集モードを閉じる
+                // 成功時：メールアドレスを更新して編集モードを閉じる
                 document.getElementById('emailDisplay').textContent = newEmail;
                 toggleEmailEdit();
             } else {
-                showMessage(data.data.message || 'エラーが発生しました', 'error');
+                // エラー時：メッセージに「既に使用されています」が含まれる場合のみ警告表示
+                const errorMessage = data.data.message || '';
+                if (errorMessage.includes('既に使用されています') || errorMessage.includes('already') || errorMessage.includes('exists')) {
+                    const errorDiv = document.getElementById('emailErrorMessage');
+                    errorDiv.textContent = errorMessage;
+                    errorDiv.classList.add('show');
+                } else {
+                    // その他のエラーは静かに閉じる
+                    toggleEmailEdit();
+                }
             }
         })
         .catch(error => {
-            showMessage('通信エラーが発生しました', 'error');
+            // 通信エラーでも編集モードを閉じる
             console.error('Error:', error);
+            toggleEmailEdit();
         })
         .finally(() => {
             submitBtn.disabled = false;
