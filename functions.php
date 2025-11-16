@@ -40,13 +40,29 @@ function sokulabo_custom_mail_from_name($original_email_from) {
     return '速ラボ PRODUCTS';
 }
 
-// wp-login.phpへのアクセスを/login/にリダイレクト（パラメータがない場合のみ）
-add_action('init', 'sokulabo_redirect_login_page');
-function sokulabo_redirect_login_page() {
-    global $pagenow;
-    // wp-login.phpで、かつGETパラメータが一切ない、かつPOSTデータがない場合のみリダイレクト
-    if ($pagenow === 'wp-login.php' && empty($_GET) && empty($_POST)) {
-        wp_redirect(home_url('/login/'));
+// wp-login.phpへのアクセスを/login/にリダイレクト
+add_action('login_head', 'sokulabo_redirect_login_page_js');
+function sokulabo_redirect_login_page_js() {
+    // POSTデータがある場合はリダイレクトしない
+    if (!empty($_POST)) {
+        return;
+    }
+    
+    // 特定のアクション（パスワードリセット、ログアウトなど）は除外
+    $action = isset($_GET['action']) ? $_GET['action'] : '';
+    $excluded_actions = array('logout', 'lostpassword', 'resetpass', 'rp', 'register', 'postpass', 'retrievepassword');
+    
+    // 確認メッセージがある場合も除外（パスワードリセット送信後など）
+    if (isset($_GET['checkemail']) || isset($_GET['registration']) || isset($_GET['confirmaction'])) {
+        return;
+    }
+    
+    if (!in_array($action, $excluded_actions)) {
+        ?>
+        <script type="text/javascript">
+            window.location.href = '<?php echo home_url('/login/'); ?>';
+        </script>
+        <?php
         exit;
     }
 }
@@ -720,6 +736,18 @@ function sokulabo_register_form_shortcode() {
     ob_start();
     ?>
     <style>
+        .sokulabo-register-logo {
+            text-align: center;
+            margin: 0 auto 30px;
+            max-width: 400px;
+        }
+        .sokulabo-register-logo h1 {
+            margin: 0 0 20px;
+            font-size: 28px;
+            font-weight: 600;
+            color: #333;
+        }
+        
         .sokulabo-register-form {
             max-width: 500px;
             margin: 40px auto;
@@ -823,6 +851,10 @@ function sokulabo_register_form_shortcode() {
             border: 1px solid #f5c6cb;
         }
     </style>
+
+    <div class="sokulabo-register-logo">
+        <h1>速ラボ PRODUCTS</h1>
+    </div>
 
     <div class="sokulabo-register-form">
         <?php if (isset($_GET['registered']) && $_GET['registered'] === 'success'): ?>
@@ -2860,6 +2892,18 @@ function sokulabo_login_form_shortcode() {
     ob_start();
     ?>
     <style>
+        .sokulabo-login-logo {
+            text-align: center;
+            margin: 0 auto 30px;
+            max-width: 400px;
+        }
+        .sokulabo-login-logo h1 {
+            margin: 0 0 20px;
+            font-size: 28px;
+            font-weight: 600;
+            color: #333;
+        }
+        
         .sokulabo-login-form,
         .sokulabo-register-form {
             max-width: 400px;
@@ -3059,6 +3103,10 @@ function sokulabo_login_form_shortcode() {
             <p style="margin: 0.5em 0; padding: 2px;"><?php echo wp_kses_post($error_msg); ?></p>
         </div>
     <?php endif; ?>
+    
+    <div class="sokulabo-login-logo">
+        <h1>速ラボ PRODUCTS</h1>
+    </div>
     
     <div class="sokulabo-login-form">
         <form method="post" action="<?php echo wp_login_url(); ?>">
@@ -3492,6 +3540,7 @@ function sokulabo_custom_login_styles() {
         /* ロゴエリア */
         #login h1 {
             margin-bottom: 20px;
+            color: #0b6bbf;
         }
         
         #login h1 a {
