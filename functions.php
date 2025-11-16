@@ -51,6 +51,36 @@ function sokulabo_redirect_login_page() {
     }
 }
 
+// ログイン認証エラーを捕捉（WordPressの標準エラーメッセージを保持）
+add_filter('authenticate', 'sokulabo_capture_auth_error', 100, 3);
+function sokulabo_capture_auth_error($user, $username, $password) {
+    if (is_wp_error($user)) {
+        // エラーメッセージを取得してグローバル変数に保存
+        global $sokulabo_login_error_message;
+        $sokulabo_login_error_message = $user->get_error_message();
+    }
+    return $user;
+}
+
+// ログインエラー時にカスタムログインページへリダイレクト
+add_action('wp_login_failed', 'sokulabo_redirect_on_login_fail');
+function sokulabo_redirect_on_login_fail($username) {
+    $referrer = $_SERVER['HTTP_REFERER'] ?? '';
+    
+    // カスタムログインページからのリクエストのみ処理
+    if (strpos($referrer, '/login') !== false) {
+        global $sokulabo_login_error_message;
+        
+        // エラーメッセージをクッキーに保存
+        if (!empty($sokulabo_login_error_message)) {
+            setcookie('login_error', $sokulabo_login_error_message, time() + 60, '/');
+        }
+        
+        wp_redirect(home_url('/login/?login_error=1'));
+        exit;
+    }
+}
+
 // // ユーザープロフィールのアバターを任意の画像に差し替える
 // add_filter( 'get_avatar_url', 'my_custom_avatar_url', 10, 3 );
 // function my_custom_avatar_url( $url, $id_or_email, $args ) {
@@ -729,6 +759,25 @@ function sokulabo_register_form_shortcode() {
             color: #666;
             font-size: 13px;
         }
+        .password-wrapper {
+            position: relative;
+        }
+        .password-toggle {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #666;
+            font-size: 14px;
+            padding: 5px;
+            line-height: 1;
+        }
+        .password-toggle:hover {
+            color: #0b6bbf;
+        }
         .required {
             color: red;
         }
@@ -808,7 +857,7 @@ function sokulabo_register_form_shortcode() {
             
             <div class="form-group">
                 <label for="user_login">ユーザー名 <span class="required">*</span></label>
-                <input type="text" id="user_login" name="user_login" required 
+                <input type="text" id="user_login" name="user_login" autocomplete="username" required 
                        pattern="[a-zA-Z0-9_-]+" 
                        title="半角英数字、ハイフン、アンダースコアのみ使用できます">
                 <small>半角英数字、ハイフン、アンダースコアのみ</small>
@@ -816,18 +865,24 @@ function sokulabo_register_form_shortcode() {
             
             <div class="form-group">
                 <label for="user_email">メールアドレス <span class="required">*</span></label>
-                <input type="email" id="user_email" name="user_email" required>
+                <input type="email" id="user_email" name="user_email" autocomplete="email" required>
             </div>
             
             <div class="form-group">
                 <label for="user_password">パスワード <span class="required">*</span></label>
-                <input type="password" id="user_password" name="user_password" required minlength="8">
+                <div class="password-wrapper">
+                    <input type="password" id="user_password" name="user_password" required minlength="8">
+                    <button type="button" class="password-toggle" onclick="togglePassword('user_password', this)">👁️</button>
+                </div>
                 <small>8文字以上</small>
             </div>
             
             <div class="form-group">
                 <label for="user_password_confirm">パスワード（確認） <span class="required">*</span></label>
-                <input type="password" id="user_password_confirm" name="user_password_confirm" required minlength="8">
+                <div class="password-wrapper">
+                    <input type="password" id="user_password_confirm" name="user_password_confirm" required minlength="8">
+                    <button type="button" class="password-toggle" onclick="togglePassword('user_password_confirm', this)">👁️</button>
+                </div>
             </div>
             
             <div class="form-group">
@@ -845,6 +900,19 @@ function sokulabo_register_form_shortcode() {
             すでにアカウントをお持ちの方は<a href="<?php echo home_url('/login/'); ?>">ログイン</a>
         </p>
     </div>
+
+    <script>
+    function togglePassword(inputId, button) {
+        const input = document.getElementById(inputId);
+        if (input.type === 'password') {
+            input.type = 'text';
+            button.textContent = '🙈';
+        } else {
+            input.type = 'password';
+            button.textContent = '👁️';
+        }
+    }
+    </script>
 
     <?php
     return ob_get_clean();
@@ -1370,7 +1438,6 @@ function sokulabo_mypage_shortcode() {
     <div class="sokulabo-mypage">
         <div class="mypage-header">
             <p>ようこそ、<?php echo esc_html($current_user->display_name); ?>さん</p>
-            <a href="<?php echo wp_logout_url(home_url()); ?>" class="logout-link">ログアウト</a>
         </div>
         
         <?php if (isset($_GET['error'])): ?>
@@ -1412,7 +1479,33 @@ function sokulabo_mypage_shortcode() {
                 </table>
             </div>
         </div>
+        
+        <!-- アカウント削除セクション -->
+        <div class="mypage-section" style="margin-top: 30px; text-align: center; padding: 20px 0; border-top: 1px solid #eee;">
+            <p style="color: #999; margin-bottom: 8px; font-size: 13px;">
+                アカウントを削除すると、すべてのライセンスキーと登録情報が完全に削除されます。
+            </p>
+            <a href="#" onclick="confirmDeleteAccount(); return false;" style="color: #dc2626; text-decoration: none; font-size: 13px;">
+                アカウントを削除する
+            </a>
+        </div>
     </div>
+    
+    <script>
+    function confirmDeleteAccount() {
+        if (confirm('本当にアカウントを削除しますか？\n\nこの操作は取り消せません。すべてのライセンスキーと登録情報が完全に削除されます。')) {
+            if (confirm('最終確認：アカウントを完全に削除してよろしいですか？')) {
+                document.getElementById('deleteAccountForm').submit();
+            }
+        }
+    }
+    </script>
+    
+    <!-- アカウント削除フォーム（非表示） -->
+    <form id="deleteAccountForm" method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display: none;">
+        <?php wp_nonce_field('sokulabo_delete_account', 'sokulabo_delete_account_nonce'); ?>
+        <input type="hidden" name="action" value="sokulabo_delete_account">
+    </form>
     
     <?php
     return ob_get_clean();
@@ -1787,6 +1880,19 @@ function sokulabo_display_user_licenses($user_id) {
             width: 18px;
             height: 18px;
         }
+        
+        /* レスポンシブ対応 */
+        @media (max-width: 768px) {
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            .button-generate {
+                width: 100%;
+                justify-content: center;
+            }
+        }
     </style>
     
     <?php if (empty($licenses)): ?>
@@ -2098,6 +2204,53 @@ function sokulabo_handle_delete_license() {
     exit;
 }
 
+// アカウント削除処理
+add_action('admin_post_sokulabo_delete_account', 'sokulabo_handle_delete_account');
+function sokulabo_handle_delete_account() {
+    // ログインチェック
+    if (!is_user_logged_in()) {
+        wp_die('ログインしてください');
+    }
+    
+    // Nonce確認
+    if (!isset($_POST['sokulabo_delete_account_nonce']) || 
+        !wp_verify_nonce($_POST['sokulabo_delete_account_nonce'], 'sokulabo_delete_account')) {
+        wp_die('不正なリクエストです');
+    }
+    
+    $current_user_id = get_current_user_id();
+    
+    // 管理者は削除不可
+    if (user_can($current_user_id, 'administrator')) {
+        wp_redirect(add_query_arg('error', urlencode('管理者アカウントは削除できません'), home_url('/mypage/')));
+        exit;
+    }
+    
+    // ユーザーに紐づくライセンスをすべて削除
+    $licenses = get_posts(array(
+        'post_type' => 'sokulabo_license',
+        'author' => $current_user_id,
+        'posts_per_page' => -1,
+    ));
+    
+    foreach ($licenses as $license) {
+        wp_delete_post($license->ID, true); // 完全削除
+    }
+    
+    // ユーザーを削除
+    require_once(ABSPATH . 'wp-admin/includes/user.php');
+    $result = wp_delete_user($current_user_id);
+    
+    if ($result) {
+        // ログアウトしてトップページにリダイレクト
+        wp_logout();
+        wp_redirect(add_query_arg('account_deleted', '1', home_url()));
+    } else {
+        wp_redirect(add_query_arg('error', urlencode('アカウントの削除に失敗しました'), home_url('/mypage/')));
+    }
+    exit;
+}
+
 // ログイン・マイページ切り替えボタンのショートコード
 add_shortcode('sokulabo_login_button', 'sokulabo_login_button_shortcode');
 function sokulabo_login_button_shortcode($atts) {
@@ -2300,6 +2453,28 @@ function sokulabo_login_form_shortcode() {
             cursor: pointer;
         }
         
+        .password-wrapper {
+            position: relative;
+        }
+        
+        .password-toggle {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #666;
+            font-size: 14px;
+            padding: 5px;
+            line-height: 1;
+        }
+        
+        .password-toggle:hover {
+            color: #0b6bbf;
+        }
+        
         .sokulabo-login-form .submit-btn,
         .sokulabo-register-form .submit-btn {
             width: 100%;
@@ -2362,30 +2537,70 @@ function sokulabo_login_form_shortcode() {
             color: #0369a1;
         }
         
+        #login_error.notice-error {
+            border: none;
+            padding: 15px 20px;
+            margin: 0 auto 24px;
+            background: #ffe7e7;
+            color: #721c24;
+            border-left: 4px solid #d63638;
+            font-size: 13px;
+            max-width: 400px;
+        }
+        
         @media (max-width: 480px) {
             .sokulabo-login-form,
             .sokulabo-register-form {
                 margin: 20px;
                 padding: 30px 20px;
             }
+            
+            #login_error.notice-error {
+                max-width: 340px!important;
+                padding: 15px 20px;
+            }
         }
     </style>
+    
+    <?php 
+    // エラーメッセージの表示（フォームの外側・上部）
+    $error_msg = '';
+    
+    // クッキーからエラーメッセージを取得
+    if (isset($_COOKIE['login_error'])) {
+        $error_msg = $_COOKIE['login_error'];
+        // クッキーを削除
+        setcookie('login_error', '', time() - 3600, '/');
+    }
+    // URLパラメータからも取得（フォールバック）
+    elseif (isset($_GET['login_error']) && isset($_COOKIE['login_error'])) {
+        $error_msg = $_COOKIE['login_error'];
+        setcookie('login_error', '', time() - 3600, '/');
+    }
+    elseif (isset($_GET['error'])) {
+        $error_msg = $_GET['error'];
+    }
+    
+    if (!empty($error_msg)): 
+    ?>
+        <div id="login_error" class="notice notice-error" style="border: none; padding: 15px 20px; margin: 0 auto 24px; background: #ffe7e7; color: #721c24; border-left: 4px solid #d63638; font-size: 13px; max-width: 400px;">
+            <p style="margin: 0.5em 0; padding: 2px;"><?php echo wp_kses_post($error_msg); ?></p>
+        </div>
+    <?php endif; ?>
+    
     <div class="sokulabo-login-form">
-        <?php if (isset($_GET['error'])): ?>
-            <div class="sokulabo-message sokulabo-error">
-                <p>✗ <?php echo esc_html(urldecode($_GET['error'])); ?></p>
-            </div>
-        <?php endif; ?>
-        
         <form method="post" action="<?php echo wp_login_url(); ?>">
             <div class="form-group">
                 <label for="user_login">ユーザー名またはメールアドレス</label>
-                <input type="text" name="log" id="user_login" required>
+                <input type="text" name="log" id="user_login" autocomplete="username" required>
             </div>
             
             <div class="form-group">
                 <label for="user_pass">パスワード</label>
-                <input type="password" name="pwd" id="user_pass" required>
+                <div class="password-wrapper">
+                    <input type="password" name="pwd" id="user_pass" autocomplete="current-password" required>
+                    <button type="button" class="password-toggle" onclick="togglePasswordLogin('user_pass', this)">👁️</button>
+                </div>
             </div>
             
             <div class="form-group checkbox-group">
@@ -2407,6 +2622,20 @@ function sokulabo_login_form_shortcode() {
             <p><a href="<?php echo home_url('/register/'); ?>">会員登録はこちら</a></p>
         </div>
     </div>
+    
+    <script>
+    function togglePasswordLogin(inputId, button) {
+        const input = document.getElementById(inputId);
+        if (input.type === 'password') {
+            input.type = 'text';
+            button.textContent = '🙈';
+        } else {
+            input.type = 'password';
+            button.textContent = '👁️';
+        }
+    }
+    </script>
+    
     <?php
     
     return ob_get_clean();
@@ -2442,7 +2671,7 @@ function sokulabo_user_info_widget_shortcode($atts) {
         background: #f8f9fa;
         border: 1px solid #e0e0e0;
         border-radius: 8px;
-        padding: 20px;
+        padding: 20px 30px;
         text-align: center;
     }
     .sidebar-user-info .user-avatar {
@@ -2826,7 +3055,6 @@ function sokulabo_custom_login_styles() {
         .login form .message,
         .login #login_error {
             border: none;
-            border-radius: 8px;
             padding: 15px 20px;
             margin: 0 0 20px;
         }
@@ -2920,12 +3148,14 @@ function sokulabo_custom_login_styles() {
         
         .login #nav a,
         .login #backtoblog a {
-            color: #fff;
+            color: #2271b1;
+            border: 1px solid #2271b1;
             text-decoration: none;
             font-size: 14px;
             font-weight: 500;
             transition: all 0.3s ease;
-            display: inline-block;
+            display: i            color: #2271b1;
+            border: 1px solid #2271b1;nline-block;
             padding: 8px 15px;
             border-radius: 6px;
             background: rgba(255, 255, 255, 0.1);
