@@ -1120,12 +1120,6 @@ function sokulabo_mypage_shortcode() {
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        .mypage-header {
-            padding-bottom: 20px;
-        }
-        .mypage-header h2 {
-            margin: 0 0 10px 0;
-        }
         .logout-link {
             position: absolute;
             top: 0;
@@ -1703,10 +1697,11 @@ function sokulabo_mypage_shortcode() {
         }
     </style>
 
+    <div class="mypage-header">
+        <p>ようこそ、<?php echo esc_html($current_user->display_name); ?>さん</p>
+    </div>
+
     <div class="sokulabo-mypage">
-        <div class="mypage-header">
-            <p>ようこそ、<?php echo esc_html($current_user->display_name); ?>さん</p>
-        </div>
         
         <!-- 動的メッセージ表示エリア -->
         <div id="mypageMessage"></div>
@@ -3013,7 +3008,7 @@ function sokulabo_login_form_shortcode() {
         .sokulabo-login-form .form-links,
         .sokulabo-register-form .form-links {
             text-align: center;
-            margin-top: 20px;
+            margin-top: 30px;
             padding-top: 20px;
             border-top: 1px solid #eee;
         }
@@ -3313,7 +3308,7 @@ function sokulabo_user_info_widget_shortcode($atts) {
         padding: 0;
     }
     .sidebar-user-info.logged-out .benefits li {
-        padding: 5px 0 5px 20px;
+        padding: 2px 0 2px 20px;
         position: relative;
         font-size: 13px;
         color: #666;
