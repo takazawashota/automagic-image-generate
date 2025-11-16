@@ -48,6 +48,11 @@ function sokulabo_redirect_login_page_js() {
         return;
     }
     
+    // 管理画面の認証チェック（interim-login）は除外
+    if (isset($_GET['interim-login'])) {
+        return;
+    }
+    
     // 特定のアクション（パスワードリセット、ログアウトなど）は除外
     $action = isset($_GET['action']) ? $_GET['action'] : '';
     $excluded_actions = array('logout', 'lostpassword', 'resetpass', 'rp', 'register', 'postpass', 'retrievepassword');
@@ -3634,6 +3639,12 @@ function sokulabo_custom_login_styles() {
         .login .button-primary:hover,
         .login .button-primary:focus {
             background: #094a87 !important;
+        }
+        
+        /* フォーム内のpタグ */
+        #login form p.forgetmenot {
+            margin-top: 0;
+            margin-bottom: 20px;
         }
         
         /* チェックボックス */
