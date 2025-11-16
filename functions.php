@@ -769,13 +769,23 @@ function sokulabo_register_form_shortcode() {
                     window.location.href = '<?php echo home_url('/login/'); ?>';
                 }, 3000);
             </script>
+        <?php elseif (isset($_GET['registered']) && $_GET['registered'] === 'pending'): ?>
+            <div class="sokulabo-message sokulabo-success">
+                <p>✓ 仮登録が完了しました！</p>
+                <p>ご登録いただいたメールアドレスに認証URLを送信しました。<br>
+                メール内のURLをクリックして、会員登録を完了してください。</p>
+                <p style="margin-top: 15px; font-size: 13px; color: #666;">
+                    ※メールが届かない場合は、迷惑メールフォルダをご確認ください。<br>
+                    ※認証URLの有効期限は24時間です。
+                </p>
+            </div>
         <?php elseif (isset($_GET['error'])): ?>
             <div class="sokulabo-message sokulabo-error">
                 <p>✗ <?php echo esc_html(urldecode($_GET['error'])); ?></p>
             </div>
         <?php endif; ?>
         
-        <?php if (!isset($_GET['registered']) || $_GET['registered'] !== 'success'): ?>
+        <?php if (!isset($_GET['registered']) || ($_GET['registered'] !== 'success' && $_GET['registered'] !== 'pending')): ?>
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <?php wp_nonce_field('sokulabo_register_user', 'sokulabo_register_nonce'); ?>
             <input type="hidden" name="action" value="sokulabo_register_user">
@@ -882,7 +892,7 @@ function sokulabo_handle_register_user() {
     ), home_url('/register/'));
     
     $to = $user_email;
-    $subject = '【SokuLabo Products】会員登録の確認';
+    $subject = '【速ラボ PRODUCTS】会員登録の確認';
     $message = "会員登録のお申し込みありがとうございます。\n\n";
     $message .= "以下のURLをクリックして、会員登録を完了してください。\n";
     $message .= "このURLは24時間有効です。\n\n";
@@ -892,7 +902,7 @@ function sokulabo_handle_register_user() {
     $message .= "メールアドレス: " . $user_email . "\n";
     $message .= "────────────────────────\n\n";
     $message .= "※このメールに心当たりがない場合は、破棄してください。\n\n";
-    $message .= "SokuLabo Products\n";
+    $message .= "速ラボ PRODUCTS\n";
     $message .= home_url();
     
     $headers = array('Content-Type: text/plain; charset=UTF-8');
@@ -943,7 +953,7 @@ function sokulabo_handle_activation() {
         
         // 本登録完了メール送信
         $to = $temp_data['user_email'];
-        $subject = '【SokuLabo Products】会員登録完了';
+        $subject = '【速ラボ PRODUCTS】会員登録完了';
         $message = "会員登録が完了しました。\n\n";
         $message .= "以下の情報でログインできます。\n\n";
         $message .= "────────────────────────\n";
@@ -951,7 +961,7 @@ function sokulabo_handle_activation() {
         $message .= "メールアドレス: " . $temp_data['user_email'] . "\n";
         $message .= "────────────────────────\n\n";
         $message .= "ログインページ: " . home_url('/login/') . "\n\n";
-        $message .= "SokuLabo Products\n";
+        $message .= "速ラボ PRODUCTS\n";
         $message .= home_url();
         
         $headers = array('Content-Type: text/plain; charset=UTF-8');
@@ -2749,3 +2759,290 @@ function sokulabo_logout_link_shortcode($atts) {
     );
 }
 
+
+/**
+ * ========================
+ * パスワードリセットページのカスタマイズ
+ * ========================
+ */
+
+// ログインページのカスタムスタイル
+add_action('login_enqueue_scripts', 'sokulabo_custom_login_styles');
+function sokulabo_custom_login_styles() {
+    ?>
+    <style type="text/css">
+        /* 全体の背景 */
+        body.login {
+            background: #fff;
+        }
+        
+        /* ログインフォームコンテナ */
+        #login {
+            width: 400px;
+            padding: 8% 0 0;
+        }
+        
+        /* ロゴエリア */
+        #login h1 {
+            margin-bottom: 20px;
+        }
+        
+        #login h1 a {
+            background-image: none !important;
+            width: auto !important;
+            height: auto !important;
+            text-indent: 0 !important;
+            font-size: 28px;
+            font-weight: 700;
+            color: #333;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+            padding: 0;
+            margin: 0 auto 30px;
+        }
+        
+        #login h1 a::after {
+
+        }
+        
+        /* フォームボックス */
+        .login form {
+            margin: 24px auto !important;
+            padding: 40px !important;
+            background: #fff !important;
+            border-radius: 8px !important;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1) !important;
+            border: none!important;
+        }
+        
+        /* フォームタイトル */
+        .login form .message,
+        .login #login_error {
+            border: none;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 0 0 20px;
+        }
+        
+        .login form .message {
+            background: #e7f3ff;
+            color: #004085;
+            border-left: 4px solid #2271b1;
+        }
+        
+        .login #login_error {
+            background: #ffe7e7;
+            color: #721c24;
+            border-left: 4px solid #d63638;
+        }
+        
+        /* ラベル */
+        .login label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            display: block;
+        }
+        
+        /* 入力フィールド */
+        .login input[type="text"],
+        .login input[type="password"],
+        .login input[type="email"] {
+            width: 100% !important;
+            padding: 10px!important;
+            border: 1px solid #ddd!important;
+            border-radius: 4px !important;
+            font-size: 16px !important;
+            transition: border-color 0.2s ease !important;
+            box-sizing: border-box !important;
+            background-color: #f7f7f7 !important;
+        }   
+        
+        .login input[type="text"]:focus,
+        .login input[type="password"]:focus,
+        .login input[type="email"]:focus {
+            border-color: #2271b1 !important;
+            outline: none !important;
+            box-shadow: 0 0 0 3px rgba(34, 113, 177, 0.1) !important;
+        }
+        
+        /* 送信ボタン */
+        .login .button-primary {
+            width: 100% !important;
+            background: #0b6bbf !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 4px !important;
+            font-size: 16px !important;
+            font-weight: 500 !important;
+            cursor: pointer !important;
+            transition: background-color 0.2s ease !important;
+        }
+        
+        .login .button-primary:hover,
+        .login .button-primary:focus {
+            background: #094a87 !important;
+        }
+        
+        /* チェックボックス */
+        .login .forgetmenot {
+            margin: 15px 0 20px;
+        }
+        
+        .login input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        .login .forgetmenot label {
+            font-weight: 400;
+            display: inline;
+            margin: 0;
+        }
+        
+        /* ナビゲーションリンク */
+        .login #nav,
+        .login #backtoblog {
+            text-align: center;
+            padding: 0;
+            margin: 20px 0 0;
+        }
+        
+        .login #nav a,
+        .login #backtoblog a {
+            color: #fff;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: inline-block;
+            padding: 8px 15px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .login #nav a:hover,
+        .login #backtoblog a:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        /* パスワードリセット固有のスタイル */
+        .login .message.reset-pass {
+            background: #d4edda;
+            color: #155724;
+            border-left-color: #28a745;
+        }
+        
+        /* 言語スイッチャー */
+        .login .language-switcher {
+            display: none;
+        }
+        
+        /* レスポンシブ */
+        @media screen and (max-width: 480px) {
+            #login {
+                width: 90%;
+                padding: 5% 0 0;
+            }
+            
+            .login form {
+                padding: 30px 20px;
+            }
+            
+            #login h1 a {
+                font-size: 24px;
+            }
+        }
+        
+        /* プライバシーポリシーリンク */
+        .login .privacy-policy-page-link {
+            text-align: center;
+            margin-top: 15px;
+        }
+        
+        .login .privacy-policy-page-link a {
+            color: #fff;
+            text-decoration: none;
+            font-size: 13px;
+            opacity: 0.8;
+            transition: opacity 0.3s ease;
+        }
+        
+        .login .privacy-policy-page-link a:hover {
+            opacity: 1;
+        }
+
+        .login .message, .login .notice, .login .success {
+            box-shadow: 0 0 10px #eee !important;
+        }
+    </style>
+    <?php
+}
+
+// ログインページのロゴリンク先を変更
+add_filter('login_headerurl', 'sokulabo_login_logo_url');
+function sokulabo_login_logo_url() {
+    return home_url();
+}
+
+// ログインページのロゴのタイトルを変更
+add_filter('login_headertext', 'sokulabo_login_logo_title');
+function sokulabo_login_logo_title() {
+    return get_bloginfo('name');
+}
+
+// パスワードリセットメールの件名をカスタマイズ
+add_filter('retrieve_password_title', 'sokulabo_retrieve_password_title');
+function sokulabo_retrieve_password_title($title) {
+    return '【速ラボ PRODUCTS】パスワードリセットのご案内';
+}
+
+// パスワードリセットメールの本文をカスタマイズ
+add_filter('retrieve_password_message', 'sokulabo_retrieve_password_message', 10, 4);
+function sokulabo_retrieve_password_message($message, $key, $user_login, $user_data) {
+    $reset_url = network_site_url("wp-login.php?action=rp&key=$key&login=" . rawurlencode($user_login), 'login');
+    
+    $message = "パスワードリセットのリクエストを受け付けました。\n\n";
+    $message .= "アカウント情報:\n";
+    $message .= "ユーザー名: " . $user_login . "\n";
+    $message .= "メールアドレス: " . $user_data->user_email . "\n\n";
+    $message .= "パスワードをリセットするには、以下のURLにアクセスしてください。\n\n";
+    $message .= $reset_url . "\n\n";
+    $message .= "※このリンクは1回のみ有効で、期限があります。\n";
+    $message .= "※このメールに心当たりがない場合は、無視してください。\n\n";
+    $message .= "────────────────────────\n";
+    $message .= get_bloginfo('name') . "\n";
+    $message .= home_url() . "\n";
+    
+    return $message;
+}
+
+// ログインページのリンクをカスタマイズ
+add_action('login_footer', 'sokulabo_customize_login_links');
+function sokulabo_customize_login_links() {
+    ?>
+    <script type="text/javascript">
+        document.addEventListener('DOMContentLoaded', function() {
+            // すべてのwp-login.phpリンクを/login/に変更
+            var loginLinks = document.querySelectorAll('a[href*="wp-login.php"]');
+            loginLinks.forEach(function(link) {
+                // action=があるリンク（パスワードリセット等）以外を変更
+                if (!link.href.includes('action=') && !link.href.includes('checkemail=')) {
+                    link.href = '<?php echo home_url('/login/'); ?>';
+                }
+            });
+            
+            // "← サイト名に移動"を削除
+            var backToBlog = document.getElementById('backtoblog');
+            if (backToBlog) {
+                backToBlog.remove();
+            }
+        });
+    </script>
+    <?php
+}
