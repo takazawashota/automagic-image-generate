@@ -1112,10 +1112,10 @@ function sokulabo_mypage_shortcode() {
             gap: 15px;
             padding: 18px 20px;
             margin-bottom: 25px;
-            border-radius: 8px;
             border-left: 4px solid;
             position: relative;
             animation: slideInDown 0.4s ease-out;
+            box-shadow: 0 0 10px #eee;
         }
         @keyframes slideInDown {
             from {
@@ -1175,7 +1175,6 @@ function sokulabo_mypage_shortcode() {
             height: 20px;
         }
         .sokulabo-success {
-            background: #f0f9ff;
             border-left-color: #22c55e;
         }
         .sokulabo-success .message-icon {
@@ -1229,6 +1228,73 @@ function sokulabo_mypage_shortcode() {
             width: 200px;
             font-weight: 600;
             background: #f9f9f9;
+        }
+        .email-edit-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .email-display {
+            flex: 1;
+        }
+        .edit-email-btn {
+            background: #0b6bbf;
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        .edit-email-btn:hover {
+            background: #094a8a;
+        }
+        .cancel-edit-btn {
+            background: #6c757d;
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        .cancel-edit-btn:hover {
+            background: #5a6268;
+        }
+        .email-edit-form {
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
+        .email-edit-form.active {
+            display: flex;
+        }
+        .email-edit-form input[type="email"] {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .email-edit-form input[type="email"]:focus {
+            outline: none;
+            border-color: #0b6bbf;
+        }
+        .save-email-btn {
+            background: #22c55e;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        .save-email-btn:hover {
+            background: #16a34a;
         }
         .license-item {
             background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
@@ -1440,20 +1506,8 @@ function sokulabo_mypage_shortcode() {
             <p>ようこそ、<?php echo esc_html($current_user->display_name); ?>さん</p>
         </div>
         
-        <?php if (isset($_GET['error'])): ?>
-            <div class="sokulabo-message sokulabo-error">
-                <div class="message-icon">
-                    <span class="dashicons dashicons-warning"></span>
-                </div>
-                <div class="message-content">
-                    <strong>エラー</strong>
-                    <p><?php echo esc_html(urldecode($_GET['error'])); ?></p>
-                </div>
-                <button class="message-close" onclick="this.parentElement.style.display='none'">
-                    <span class="dashicons dashicons-no-alt"></span>
-                </button>
-            </div>
-        <?php endif; ?>
+        <!-- 動的メッセージ表示エリア -->
+        <div id="mypageMessage"></div>
         
         <div class="mypage-content">
             <div class="mypage-section">
@@ -1470,7 +1524,17 @@ function sokulabo_mypage_shortcode() {
                     </tr>
                     <tr>
                         <th>メールアドレス</th>
-                        <td><?php echo esc_html($current_user->user_email); ?></td>
+                        <td>
+                            <div class="email-edit-wrapper">
+                                <span class="email-display" id="emailDisplay"><?php echo esc_html($current_user->user_email); ?></span>
+                                <button type="button" class="edit-email-btn" onclick="toggleEmailEdit()">編集</button>
+                            </div>
+                            <form class="email-edit-form" id="emailEditForm" onsubmit="updateEmail(event)">
+                                <input type="email" name="new_email" id="newEmail" value="<?php echo esc_attr($current_user->user_email); ?>" required>
+                                <button type="submit" class="save-email-btn" id="saveEmailBtn">保存</button>
+                                <button type="button" class="cancel-edit-btn" onclick="toggleEmailEdit()">キャンセル</button>
+                            </form>
+                        </td>
                     </tr>
                     <tr>
                         <th>登録日</th>
@@ -1492,6 +1556,109 @@ function sokulabo_mypage_shortcode() {
     </div>
     
     <script>
+    // AJAX用のデータをグローバル変数として定義
+    const sokulabo_ajax_data = {
+        ajax_url: '<?php echo admin_url("admin-ajax.php"); ?>',
+        nonce: '<?php echo wp_create_nonce("sokulabo_update_email_ajax"); ?>'
+    };
+    
+    function showMessage(message, type) {
+        const messageDiv = document.getElementById('mypageMessage');
+        const iconClass = type === 'success' ? 'dashicons-yes-alt' : 'dashicons-warning';
+        const typeClass = type === 'success' ? 'sokulabo-success' : 'sokulabo-error';
+        const title = type === 'success' ? '成功' : 'エラー';
+        
+        messageDiv.innerHTML = `
+            <div class="sokulabo-message ${typeClass}">
+                <div class="message-icon">
+                    <span class="dashicons ${iconClass}"></span>
+                </div>
+                <div class="message-content">
+                    <strong>${title}</strong>
+                    <p>${message}</p>
+                </div>
+                <button class="message-close" onclick="this.parentElement.remove()">
+                    <span class="dashicons dashicons-no-alt"></span>
+                </button>
+            </div>
+        `;
+        
+        // 自動で3秒後に消す
+        setTimeout(() => {
+            const msg = messageDiv.querySelector('.sokulabo-message');
+            if (msg) msg.remove();
+        }, 5000);
+    }
+    
+    function toggleEmailEdit() {
+        const display = document.getElementById('emailDisplay');
+        const form = document.getElementById('emailEditForm');
+        const btn = document.querySelector('.edit-email-btn');
+        
+        if (form.classList.contains('active')) {
+            form.classList.remove('active');
+            display.style.display = 'inline';
+            btn.style.display = 'inline-block';
+        } else {
+            display.style.display = 'none';
+            btn.style.display = 'none';
+            form.classList.add('active');
+            document.getElementById('newEmail').focus();
+        }
+    }
+    
+    function updateEmail(event) {
+        event.preventDefault();
+        
+        const submitBtn = document.getElementById('saveEmailBtn');
+        const newEmail = document.getElementById('newEmail').value.trim();
+        const currentEmail = document.getElementById('emailDisplay').textContent;
+        
+        // クライアント側で基本的なバリデーション
+        if (!newEmail) {
+            showMessage('メールアドレスを入力してください', 'error');
+            return;
+        }
+        
+        if (newEmail.toLowerCase() === currentEmail.toLowerCase()) {
+            showMessage('現在と同じメールアドレスです', 'error');
+            return;
+        }
+        
+        // ボタンを無効化
+        submitBtn.disabled = true;
+        submitBtn.textContent = '更新中...';
+        
+        // AJAX送信
+        const formData = new FormData();
+        formData.append('action', 'sokulabo_update_email_ajax');
+        formData.append('new_email', newEmail);
+        formData.append('nonce', sokulabo_ajax_data.nonce);
+        
+        fetch(sokulabo_ajax_data.ajax_url, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showMessage(data.data.message, 'success');
+                document.getElementById('emailDisplay').textContent = newEmail;
+                toggleEmailEdit();
+            } else {
+                showMessage(data.data.message || 'エラーが発生しました', 'error');
+            }
+        })
+        .catch(error => {
+            showMessage('通信エラーが発生しました', 'error');
+            console.error('Error:', error);
+        })
+        .finally(() => {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '保存';
+        });
+    }
+    
     function confirmDeleteAccount() {
         if (confirm('本当にアカウントを削除しますか？\n\nこの操作は取り消せません。すべてのライセンスキーと登録情報が完全に削除されます。')) {
             if (confirm('最終確認：アカウントを完全に削除してよろしいですか？')) {
@@ -2204,7 +2371,119 @@ function sokulabo_handle_delete_license() {
     exit;
 }
 
-// アカウント削除処理
+// メールアドレス更新処理（AJAX用）
+add_action('wp_ajax_sokulabo_update_email_ajax', 'sokulabo_handle_update_email_ajax');
+function sokulabo_handle_update_email_ajax() {
+    // Nonce確認
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'sokulabo_update_email_ajax')) {
+        wp_send_json_error(array('message' => '不正なリクエストです'));
+    }
+    
+    // ログインチェック
+    if (!is_user_logged_in()) {
+        wp_send_json_error(array('message' => 'ログインしてください'));
+    }
+    
+    $current_user_id = get_current_user_id();
+    $current_user = wp_get_current_user();
+    
+    // 入力値の取得とトリミング
+    $new_email = isset($_POST['new_email']) ? trim(sanitize_email($_POST['new_email'])) : '';
+    
+    // 空欄チェック
+    if (empty($new_email)) {
+        wp_send_json_error(array('message' => 'メールアドレスを入力してください'));
+    }
+    
+    // メールアドレスの形式チェック
+    if (!is_email($new_email)) {
+        wp_send_json_error(array('message' => '有効なメールアドレスを入力してください'));
+    }
+    
+    // 既存のメールアドレスと同じかチェック（小文字に統一して比較）
+    if (strtolower($current_user->user_email) === strtolower($new_email)) {
+        wp_send_json_error(array('message' => '現在と同じメールアドレスです'));
+    }
+    
+    // 他のユーザーが使用していないかチェック
+    $existing_user_id = email_exists($new_email);
+    if ($existing_user_id && $existing_user_id != $current_user_id) {
+        wp_send_json_error(array('message' => 'このメールアドレスは既に使用されています'));
+    }
+    
+    // メールアドレスを更新
+    $result = wp_update_user(array(
+        'ID' => $current_user_id,
+        'user_email' => $new_email
+    ));
+    
+    if (is_wp_error($result)) {
+        wp_send_json_error(array('message' => 'メールアドレスの更新に失敗しました'));
+    } else {
+        wp_send_json_success(array('message' => 'メールアドレスを更新しました'));
+    }
+}
+
+// メールアドレス更新処理（従来のフォーム送信用 - 互換性のため残す）
+add_action('admin_post_sokulabo_update_email', 'sokulabo_handle_update_email');
+function sokulabo_handle_update_email() {
+    // ログインチェック
+    if (!is_user_logged_in()) {
+        wp_die('ログインしてください');
+    }
+    
+    // Nonce確認
+    if (!isset($_POST['sokulabo_update_email_nonce']) || 
+        !wp_verify_nonce($_POST['sokulabo_update_email_nonce'], 'sokulabo_update_email')) {
+        wp_die('不正なリクエストです');
+    }
+    
+    $current_user_id = get_current_user_id();
+    $current_user = wp_get_current_user();
+    
+    // 入力値の取得とトリミング
+    $new_email = isset($_POST['new_email']) ? trim(sanitize_email($_POST['new_email'])) : '';
+    
+    // 空欄チェック
+    if (empty($new_email)) {
+        wp_redirect(add_query_arg('error', urlencode('メールアドレスを入力してください'), home_url('/mypage/')));
+        exit;
+    }
+    
+    // メールアドレスの形式チェック
+    if (!is_email($new_email)) {
+        wp_redirect(add_query_arg('error', urlencode('有効なメールアドレスを入力してください'), home_url('/mypage/')));
+        exit;
+    }
+    
+    // 既存のメールアドレスと同じかチェック（小文字に統一して比較）
+    if (strtolower($current_user->user_email) === strtolower($new_email)) {
+        $redirect_url = add_query_arg('error', urlencode('現在と同じメールアドレスです'), home_url('/mypage/'));
+        wp_redirect($redirect_url);
+        exit;
+    }
+    
+    // 他のユーザーが使用していないかチェック
+    $existing_user_id = email_exists($new_email);
+    if ($existing_user_id && $existing_user_id != $current_user_id) {
+        wp_redirect(add_query_arg('error', urlencode('このメールアドレスは既に使用されています'), home_url('/mypage/')));
+        exit;
+    }
+    
+    // メールアドレスを更新
+    $result = wp_update_user(array(
+        'ID' => $current_user_id,
+        'user_email' => $new_email
+    ));
+    
+    if (is_wp_error($result)) {
+        wp_redirect(add_query_arg('error', urlencode('メールアドレスの更新に失敗しました'), home_url('/mypage/')));
+    } else {
+        wp_redirect(add_query_arg('success', urlencode('メールアドレスを更新しました'), home_url('/mypage/')));
+    }
+    exit;
+}
+
 add_action('admin_post_sokulabo_delete_account', 'sokulabo_handle_delete_account');
 function sokulabo_handle_delete_account() {
     // ログインチェック
