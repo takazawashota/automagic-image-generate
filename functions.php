@@ -29,6 +29,28 @@ add_action('wp_enqueue_scripts', function() {
 
 /*.以下カスタマイズコードになります */
 
+// メール送信元をカスタマイズ
+add_filter('wp_mail_from', 'sokulabo_custom_mail_from');
+function sokulabo_custom_mail_from($original_email_address) {
+    return 'info@sokulabo.com';
+}
+
+add_filter('wp_mail_from_name', 'sokulabo_custom_mail_from_name');
+function sokulabo_custom_mail_from_name($original_email_from) {
+    return '速ラボ PRODUCTS';
+}
+
+// wp-login.phpへのアクセスを/login/にリダイレクト（パラメータがない場合のみ）
+add_action('init', 'sokulabo_redirect_login_page');
+function sokulabo_redirect_login_page() {
+    global $pagenow;
+    // wp-login.phpで、かつGETパラメータが一切ない、かつPOSTデータがない場合のみリダイレクト
+    if ($pagenow === 'wp-login.php' && empty($_GET) && empty($_POST)) {
+        wp_redirect(home_url('/login/'));
+        exit;
+    }
+}
+
 // // ユーザープロフィールのアバターを任意の画像に差し替える
 // add_filter( 'get_avatar_url', 'my_custom_avatar_url', 10, 3 );
 // function my_custom_avatar_url( $url, $id_or_email, $args ) {
@@ -676,10 +698,6 @@ function sokulabo_register_form_shortcode() {
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        .sokulabo-register-form h2 {
-            margin-top: 0;
-            text-align: center;
-        }
         .form-group {
             margin-bottom: 20px;
         }
@@ -716,7 +734,7 @@ function sokulabo_register_form_shortcode() {
         }
         .button-primary {
             width: 100%;
-            padding: 12px;
+            padding: 6px 14px;
             background: #0b6bbf;
             color: #fff;
             border: none;
@@ -758,8 +776,6 @@ function sokulabo_register_form_shortcode() {
     </style>
 
     <div class="sokulabo-register-form">
-        <h2>会員登録</h2>
-        
         <?php if (isset($_GET['registered']) && $_GET['registered'] === 'success'): ?>
             <div class="sokulabo-message sokulabo-success">
                 <p>✓ 会員登録が完了しました！ログインページへ移動します...</p>
@@ -2229,14 +2245,6 @@ function sokulabo_login_form_shortcode() {
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         
-        .sokulabo-login-form h2,
-        .sokulabo-register-form h2 {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #333;
-            font-size: 24px;
-        }
-        
         .sokulabo-login-form .form-group,
         .sokulabo-register-form .form-group {
             margin-bottom: 20px;
@@ -2295,7 +2303,7 @@ function sokulabo_login_form_shortcode() {
         .sokulabo-login-form .submit-btn,
         .sokulabo-register-form .submit-btn {
             width: 100%;
-            padding: 14px;
+            padding: 6px 14px;
             background: #0b6bbf;
             color: white;
             border: none;
@@ -2363,8 +2371,6 @@ function sokulabo_login_form_shortcode() {
         }
     </style>
     <div class="sokulabo-login-form">
-        <h2>ログイン</h2>
-        
         <?php if (isset($_GET['error'])): ?>
             <div class="sokulabo-message sokulabo-error">
                 <p>✗ <?php echo esc_html(urldecode($_GET['error'])); ?></p>
