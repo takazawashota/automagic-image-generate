@@ -167,6 +167,7 @@ function sokulabo_license_columns($columns) {
         'status' => 'ステータス',
         'expires' => '有効期限',
         'sites' => '使用サイト数',
+        'registered_sites' => '登録済みサイト',
         'max_sites' => '最大サイト数',
         'product' => '商品タイプ',
         'date' => '作成日',
@@ -222,6 +223,29 @@ function sokulabo_license_column_content($column, $post_id) {
             $activations = get_post_meta($post_id, '_license_activations', true);
             $activations = $activations ? json_decode($activations, true) : array();
             echo count($activations);
+            break;
+            
+        case 'registered_sites':
+            $activations = get_post_meta($post_id, '_license_activations', true);
+            $activations = $activations ? json_decode($activations, true) : array();
+            
+            if (empty($activations)) {
+                echo '<span style="color: #999;">未登録</span>';
+            } else {
+                echo '<div style="max-height: 100px; overflow-y: auto;">';
+                foreach ($activations as $activation) {
+                    $site_url = isset($activation['site_url']) ? $activation['site_url'] : '';
+                    $activated_date = isset($activation['activated_at']) ? date('Y/m/d', strtotime($activation['activated_at'])) : '-';
+                    
+                    if ($site_url) {
+                        echo '<div style="margin-bottom: 5px; padding: 4px 0; border-bottom: 1px solid #f0f0f0;">';
+                        echo '<a href="' . esc_url($site_url) . '" target="_blank" style="text-decoration: none; color: #2271b1;">' . esc_html($site_url) . '</a>';
+                        echo '<br><small style="color: #666;">登録日: ' . esc_html($activated_date) . '</small>';
+                        echo '</div>';
+                    }
+                }
+                echo '</div>';
+            }
             break;
             
         case 'max_sites':
@@ -738,6 +762,79 @@ function sokulabo_register_form_shortcode() {
         exit;
     }
     
+    // POST処理をショートコード内で直接実行
+    $error_message = '';
+    $success_message = '';
+    $show_form = true;
+    
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sokulabo_register_submit'])) {
+        // Nonce確認
+        if (!isset($_POST['sokulabo_register_nonce']) || 
+            !wp_verify_nonce($_POST['sokulabo_register_nonce'], 'sokulabo_register_user')) {
+            $error_message = '不正なリクエストです';
+        } else {
+            $user_login = sanitize_user($_POST['user_login'] ?? '');
+            $user_email = sanitize_email($_POST['user_email'] ?? '');
+            $user_password = $_POST['user_password'] ?? '';
+            $user_password_confirm = $_POST['user_password_confirm'] ?? '';
+            
+            // バリデーション
+            if (empty($user_login) || empty($user_email) || empty($user_password)) {
+                $error_message = '全ての項目を入力してください';
+            } elseif ($user_password !== $user_password_confirm) {
+                $error_message = 'パスワードが一致しません';
+            } elseif (strlen($user_password) < 8) {
+                $error_message = 'パスワードは8文字以上で入力してください';
+            } elseif (username_exists($user_login)) {
+                $error_message = 'このユーザー名は既に使用されています';
+            } elseif (email_exists($user_email)) {
+                $error_message = 'このメールアドレスは既に登録されています';
+            } else {
+                // 仮登録データを一時保存（24時間有効）
+                $activation_key = wp_generate_password(32, false);
+                $temp_data = array(
+                    'user_login' => $user_login,
+                    'user_email' => $user_email,
+                    'user_password' => $user_password,
+                    'timestamp' => current_time('timestamp')
+                );
+                
+                set_transient('sokulabo_temp_user_' . $activation_key, $temp_data, 24 * HOUR_IN_SECONDS);
+                
+                // 認証メール送信
+                $activation_url = add_query_arg(array(
+                    'action' => 'activate',
+                    'key' => $activation_key
+                ), home_url('/register/'));
+                
+                $to = $user_email;
+                $subject = '【速ラボ PRODUCTS】会員登録の確認';
+                $message = "会員登録のお申し込みありがとうございます。\n\n";
+                $message .= "以下のURLをクリックして、会員登録を完了してください。\n";
+                $message .= "このURLは24時間有効です。\n\n";
+                $message .= $activation_url . "\n\n";
+                $message .= "────────────────────────\n";
+                $message .= "ユーザー名: " . $user_login . "\n";
+                $message .= "メールアドレス: " . $user_email . "\n";
+                $message .= "────────────────────────\n\n";
+                $message .= "※このメールに心当たりがない場合は、破棄してください。\n\n";
+                $message .= "速ラボ PRODUCTS\n";
+                $message .= home_url();
+                
+                $headers = array('Content-Type: text/plain; charset=UTF-8');
+                
+                if (wp_mail($to, $subject, $message, $headers)) {
+                    // メール送信成功
+                    $success_message = 'pending';
+                    $show_form = false;
+                } else {
+                    // メール送信失敗
+                    $error_message = 'メールの送信に失敗しました。しばらく時間をおいて再度お試しください。';
+                }
+            }
+        }
+    }
+    
     ob_start();
     ?>
     <style>
@@ -767,7 +864,6 @@ function sokulabo_register_form_shortcode() {
         .form-group label {
             display: block;
             margin-bottom: 5px;
-            font-weight: 600;
         }
         .form-group input[type="text"],
         .form-group input[type="email"],
@@ -862,16 +958,19 @@ function sokulabo_register_form_shortcode() {
     </div>
 
     <div class="sokulabo-register-form">
-        <?php if (isset($_GET['registered']) && $_GET['registered'] === 'success'): ?>
-            <div class="sokulabo-message sokulabo-success">
-                <p>✓ 会員登録が完了しました！ログインページへ移動します...</p>
+        <?php 
+        // エラーメッセージの表示
+        if (!empty($error_message)): 
+        ?>
+            <div class="sokulabo-message sokulabo-error">
+                <p><?php echo esc_html($error_message); ?></p>
             </div>
-            <script>
-                setTimeout(function() {
-                    window.location.href = '<?php echo home_url('/login/'); ?>';
-                }, 3000);
-            </script>
-        <?php elseif (isset($_GET['registered']) && $_GET['registered'] === 'pending'): ?>
+        <?php endif; ?>
+        
+        <?php 
+        // 成功メッセージの表示
+        if ($success_message === 'pending'): 
+        ?>
             <div class="sokulabo-message sokulabo-success">
                 <p>✓ 仮登録が完了しました！</p>
                 <p>ご登録いただいたメールアドレスに認証URLを送信しました。<br>
@@ -881,28 +980,35 @@ function sokulabo_register_form_shortcode() {
                     ※認証URLの有効期限は24時間です。
                 </p>
             </div>
-        <?php elseif (isset($_GET['error'])): ?>
-            <div class="sokulabo-message sokulabo-error">
-                <p>✗ <?php echo esc_html(urldecode($_GET['error'])); ?></p>
+        <?php elseif (isset($_GET['registered']) && $_GET['registered'] === 'success'): ?>
+            <div class="sokulabo-message sokulabo-success">
+                <p>✓ 会員登録が完了しました！ログインページへ移動します...</p>
             </div>
+            <script>
+                setTimeout(function() {
+                    window.location.href = '<?php echo home_url('/login/'); ?>';
+                }, 3000);
+            </script>
         <?php endif; ?>
         
-        <?php if (!isset($_GET['registered']) || ($_GET['registered'] !== 'success' && $_GET['registered'] !== 'pending')): ?>
-        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+        <?php if ($show_form && !isset($_GET['registered'])): ?>
+        <form method="post" action="">
             <?php wp_nonce_field('sokulabo_register_user', 'sokulabo_register_nonce'); ?>
-            <input type="hidden" name="action" value="sokulabo_register_user">
+            <input type="hidden" name="sokulabo_register_submit" value="1">
             
             <div class="form-group">
                 <label for="user_login">ユーザー名 <span class="required">*</span></label>
                 <input type="text" id="user_login" name="user_login" autocomplete="username" required 
                        pattern="[a-zA-Z0-9_-]+" 
-                       title="半角英数字、ハイフン、アンダースコアのみ使用できます">
+                       title="半角英数字、ハイフン、アンダースコアのみ使用できます"
+                       value="<?php echo isset($_POST['user_login']) ? esc_attr($_POST['user_login']) : ''; ?>">
                 <small>半角英数字、ハイフン、アンダースコアのみ</small>
             </div>
             
             <div class="form-group">
                 <label for="user_email">メールアドレス <span class="required">*</span></label>
-                <input type="email" id="user_email" name="user_email" autocomplete="email" required>
+                <input type="email" id="user_email" name="user_email" autocomplete="email" required
+                       value="<?php echo isset($_POST['user_email']) ? esc_attr($_POST['user_email']) : ''; ?>">
             </div>
             
             <div class="form-group">
@@ -955,92 +1061,7 @@ function sokulabo_register_form_shortcode() {
     return ob_get_clean();
 }
 
-// 会員登録処理（ログインしていないユーザーのみ）- 仮登録
-add_action('admin_post_nopriv_sokulabo_register_user', 'sokulabo_handle_register_user');
-function sokulabo_handle_register_user() {
-    // Nonce確認
-    if (!isset($_POST['sokulabo_register_nonce']) || 
-        !wp_verify_nonce($_POST['sokulabo_register_nonce'], 'sokulabo_register_user')) {
-        wp_die('不正なリクエストです');
-    }
-    
-    $user_login = sanitize_user($_POST['user_login']);
-    $user_email = sanitize_email($_POST['user_email']);
-    $user_password = $_POST['user_password'];
-    $user_password_confirm = $_POST['user_password_confirm'];
-    
-    // バリデーション
-    if (empty($user_login) || empty($user_email) || empty($user_password)) {
-        wp_redirect(add_query_arg('error', urlencode('全ての項目を入力してください'), wp_get_referer()));
-        exit;
-    }
-    
-    if ($user_password !== $user_password_confirm) {
-        wp_redirect(add_query_arg('error', urlencode('パスワードが一致しません'), wp_get_referer()));
-        exit;
-    }
-    
-    if (strlen($user_password) < 8) {
-        wp_redirect(add_query_arg('error', urlencode('パスワードは8文字以上で入力してください'), wp_get_referer()));
-        exit;
-    }
-    
-    if (username_exists($user_login)) {
-        wp_redirect(add_query_arg('error', urlencode('このユーザー名は既に使用されています'), wp_get_referer()));
-        exit;
-    }
-    
-    if (email_exists($user_email)) {
-        wp_redirect(add_query_arg('error', urlencode('このメールアドレスは既に登録されています'), wp_get_referer()));
-        exit;
-    }
-    
-    // 仮登録データを一時保存（24時間有効）
-    $activation_key = wp_generate_password(32, false);
-    $temp_data = array(
-        'user_login' => $user_login,
-        'user_email' => $user_email,
-        'user_password' => $user_password,
-        'timestamp' => current_time('timestamp')
-    );
-    
-    set_transient('sokulabo_temp_user_' . $activation_key, $temp_data, 24 * HOUR_IN_SECONDS);
-    
-    // 認証メール送信
-    $activation_url = add_query_arg(array(
-        'action' => 'activate',
-        'key' => $activation_key
-    ), home_url('/register/'));
-    
-    $to = $user_email;
-    $subject = '【速ラボ PRODUCTS】会員登録の確認';
-    $message = "会員登録のお申し込みありがとうございます。\n\n";
-    $message .= "以下のURLをクリックして、会員登録を完了してください。\n";
-    $message .= "このURLは24時間有効です。\n\n";
-    $message .= $activation_url . "\n\n";
-    $message .= "────────────────────────\n";
-    $message .= "ユーザー名: " . $user_login . "\n";
-    $message .= "メールアドレス: " . $user_email . "\n";
-    $message .= "────────────────────────\n\n";
-    $message .= "※このメールに心当たりがない場合は、破棄してください。\n\n";
-    $message .= "速ラボ PRODUCTS\n";
-    $message .= home_url();
-    
-    $headers = array('Content-Type: text/plain; charset=UTF-8');
-    
-    if (wp_mail($to, $subject, $message, $headers)) {
-        // メール送信成功
-        $register_url = home_url('/register/');
-        wp_redirect(add_query_arg('registered', 'pending', $register_url));
-        exit;
-    } else {
-        // メール送信失敗
-        wp_redirect(add_query_arg('error', urlencode('メールの送信に失敗しました。しばらく時間をおいて再度お試しください。'), wp_get_referer()));
-        exit;
-    }
-}
-
-// メール認証による本登録処理
+// メール認証による本登録処理（ショートコード内で処理するため、admin_postフックは削除）
 add_action('template_redirect', 'sokulabo_handle_activation');
 function sokulabo_handle_activation() {
     if (isset($_GET['action']) && $_GET['action'] === 'activate' && isset($_GET['key'])) {
@@ -2041,7 +2062,6 @@ function sokulabo_display_user_licenses($user_id) {
         .form-group label {
             display: block;
             margin-bottom: 8px;
-            font-weight: 600;
             color: #333;
         }
         .license-list-empty {
