@@ -33,10 +33,10 @@ define('PUM_UPDATE_SERVER_URL', 'https://sokulabo.com/products/plugins/automagic
 define('PUM_LICENSE_PAGE_SLUG', 'amig-license');
 
 // アップデーターを読み込み
-require_once AMIG_PLUGIN_DIR . 'universal-plugin-updater.php';
+require_once __DIR__ . '/universal-plugin-updater.php';
 
 // フォントマネージャーを読み込み
-require_once AMIG_PLUGIN_DIR . 'font-manager.php';
+require_once __DIR__ . '/font-manager.php';
 
 class Automagic_Image_Generate {
     
