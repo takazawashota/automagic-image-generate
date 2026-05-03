@@ -9,6 +9,7 @@ if (!defined('ABSPATH')) {
     exit; // 直接アクセスを防止
 }
 
+if (!class_exists('Automagic_Font_Manager')) {
 class Automagic_Font_Manager {
     
     private static $instance = null;
@@ -541,6 +542,7 @@ class Automagic_Font_Manager {
         return empty($missing_fonts);
     }
 }
+} // end class_exists Automagic_Font_Manager
 
 // フォントマネージャーを初期化
 add_action('plugins_loaded', array('Automagic_Font_Manager', 'get_instance'));
