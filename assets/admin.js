@@ -51,6 +51,33 @@ jQuery(document).ready(function ($) {
         schedulePreview();
     });
 
+    $('#amig-line-height-range').on('input', function () {
+        var v = $(this).val();
+        $('#amig-line-height-val').text(v);
+        $('#amig-line-height').val(v);
+        schedulePreview();
+    });
+
+    $('#amig-letter-spacing-range').on('input', function () {
+        var v = $(this).val();
+        $('#amig-letter-spacing-val').text(v + 'px');
+        $('#amig-letter-spacing').val(v);
+        schedulePreview();
+    });
+
+    $('#amig-max-chars-range').on('input', function () {
+        var v = $(this).val();
+        $('#amig-max-chars-val').text(v == '0' ? '制限なし' : v + '文字');
+        $('#amig-max-chars').val(v);
+        schedulePreview();
+    });
+
+    $('#amig-text-bg-opacity-range').on('input', function () {
+        var v = $(this).val();
+        $('#amig-text-bg-opacity-val').text(v == '0' ? 'なし' : v + '%');
+        schedulePreview();
+    });
+
     /* ============================================================
        フォントウェイトピルボタン
     ============================================================ */
@@ -58,6 +85,17 @@ jQuery(document).ready(function ($) {
         $(this).closest('.amig-weight-group').find('.amig-weight-btn').removeClass('is-active');
         $(this).addClass('is-active');
         $(this).closest('.amig-weight-group').find('input[type="radio"]').prop('checked', false);
+        $(this).find('input[type="radio"]').prop('checked', true);
+        schedulePreview();
+    });
+
+    /* ============================================================
+       テキスト配置ボタン
+    ============================================================ */
+    $(document).on('click', '.amig-align-btn', function () {
+        $(this).closest('.amig-align-group').find('.amig-align-btn').removeClass('is-active');
+        $(this).addClass('is-active');
+        $(this).closest('.amig-align-group').find('input[type="radio"]').prop('checked', false);
         $(this).find('input[type="radio"]').prop('checked', true);
         schedulePreview();
     });
@@ -286,6 +324,9 @@ jQuery(document).ready(function ($) {
     function schedulePreview() {
         if (typeof amigAjax === 'undefined') return;
         clearTimeout(previewTimer);
+        $('#amig-preview-status')
+            .removeClass('is-loading')
+            .html('<span class="dashicons dashicons-clock"></span> 更新待機中…');
         previewTimer = setTimeout(triggerPreview, 600);
     }
 
@@ -298,6 +339,10 @@ jQuery(document).ready(function ($) {
         var $canvasWrap = $panel.find('.amig-preview-canvas-wrap');
         var $ph = $panel.find('#amig-preview-placeholder');
         $canvasWrap.addClass('is-loading');
+
+        $('#amig-preview-status')
+            .addClass('is-loading')
+            .html('<span class="dashicons dashicons-update"></span> 生成中…');
 
         // プレースホルダーをリセット
         $ph.css('color', '').find('.dashicons')
@@ -334,8 +379,17 @@ jQuery(document).ready(function ($) {
             success: function (r) {
                 if (r.success && r.data && r.data.url) {
                     var $img = $panel.find('.amig-preview-image');
-                    $img.attr('src', r.data.url + '?t=' + Date.now()).show();
+                    var url = r.data.url + '?t=' + Date.now();
+                    $img.attr('src', url).show();
                     $ph.hide();
+                    // ダウンロードボタンを有効化
+                    $('#amig-download-btn').attr('href', url).show();
+                    // ステータス更新
+                    var now = new Date();
+                    var ts = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    $('#amig-preview-status')
+                        .removeClass('is-loading')
+                        .html('<span class="dashicons dashicons-yes"></span> ' + ts + ' 更新');
                 } else {
                     var msg = (r && r.data) ? r.data : '画像の生成に失敗しました';
                     $ph.css('color', '#dc2626')
@@ -347,6 +401,9 @@ jQuery(document).ready(function ($) {
                     }
                     $ph.show();
                     $panel.find('.amig-preview-image').hide();
+                    $('#amig-preview-status')
+                        .removeClass('is-loading')
+                        .html('<span class="dashicons dashicons-warning"></span> 生成失敗');
                 }
             },
             error: function (xhr, textStatus) {
@@ -363,6 +420,9 @@ jQuery(document).ready(function ($) {
                 $ph.find('span:not(.dashicons)').text(msg);
                 $ph.show();
                 $panel.find('.amig-preview-image').hide();
+                $('#amig-preview-status')
+                    .removeClass('is-loading')
+                    .html('<span class="dashicons dashicons-warning"></span> エラー');
             },
             complete: function () {
                 $canvasWrap.removeClass('is-loading');

@@ -20,20 +20,16 @@
 
 /* ── ページラッパー ── */
 .amig-wrap {
-    max-width: 1200px;
-    margin: 20px 20px 40px;
+    padding-right: 20px;
+    margin-top: 10px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: var(--amig-text);
 }
 
 /* ── ページヘッダー ── */
 .amig-page-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
+    margin-bottom: 16px;
+    overflow: hidden;
 }
 
 .amig-page-title {
@@ -157,6 +153,7 @@
     font-size: 12px;
     color: var(--amig-muted);
     margin-top: 4px;
+    margin-bottom: 0 !important;
 }
 
 /* ── インプット ── */
@@ -402,6 +399,58 @@
     color: #fff;
 }
 
+/* ── テキスト配置ボタン ── */
+.amig-align-group {
+    display: flex;
+    gap: 6px;
+}
+
+.amig-align-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--amig-border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all .15s;
+    color: var(--amig-muted);
+    background: var(--amig-surface);
+}
+
+.amig-align-btn input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.amig-align-btn:hover {
+    border-color: var(--amig-primary);
+    color: var(--amig-primary);
+}
+
+.amig-align-btn.is-active {
+    background: var(--amig-primary);
+    border-color: var(--amig-primary);
+    color: #fff;
+}
+
+.amig-align-btn .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+.amig-align-btn-text {
+    width: auto;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
 /* ── 範囲スライダー ── */
 .amig-range-row {
     display: flex;
@@ -477,10 +526,16 @@
     top: 40px;
 }
 
+/* プレビューボックス（画像＋フッターを一体化） */
+.amig-preview-box {
+    border: 1px solid var(--amig-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
 .amig-preview-canvas-wrap {
     position: relative;
     background: repeating-conic-gradient(#e5e7eb 0% 25%, #fff 0% 50%) 0 0 / 16px 16px;
-    border-radius: 6px 6px 0 0;
     overflow: hidden;
     aspect-ratio: 1200/630;
 }
@@ -541,35 +596,86 @@
     }
 }
 
+/* サイズバッジ（画像右下に重ねて表示） */
+.amig-preview-size-badge {
+    position: absolute;
+    bottom: 8px;
+    right: 10px;
+    background: rgba(0, 0, 0, .55);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: .5px;
+    pointer-events: none;
+}
+
 .amig-preview-footer {
-    padding: 10px 14px;
     background: #f6f7f8;
     border-top: 1px solid var(--amig-border);
-    border-radius: 0 0 6px 6px;
+}
+
+/* 1段目：テキスト入力 + 更新ボタン */
+.amig-preview-footer-input {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--amig-border);
+}
+
+/* 2段目：ステータス + ダウンロード */
+.amig-preview-footer-meta {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-}
-
-.amig-preview-footer-text {
-    font-size: 12px;
-    color: var(--amig-muted);
+    padding: 6px 10px;
+    min-height: 34px;
 }
 
 .amig-preview-text-input {
     flex: 1;
-    padding: 6px 10px;
+    padding: 5px 9px;
     border: 1px solid var(--amig-border);
     border-radius: 5px;
     font-size: 12px;
     min-width: 0;
+    background: #fff;
 }
 
 .amig-preview-text-input:focus {
     outline: none;
     border-color: var(--amig-primary);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, .12);
 }
+
+.amig-preview-status {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--amig-muted);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.amig-preview-status .dashicons {
+    font-size: 13px;
+    width: 13px;
+    height: 13px;
+    vertical-align: middle;
+}
+
+.amig-preview-status.is-loading {
+    color: var(--amig-primary);
+}
+
+.amig-preview-status.is-loading .dashicons {
+    animation: amig-spin .7s linear infinite;
+}
+
 
 /* ── ボタン ── */
 .amig-btn {
@@ -612,6 +718,42 @@
     text-decoration: none;
 }
 
+/* アイコンのみの正方形ボタン */
+.amig-btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    flex-shrink: 0;
+    justify-content: center;
+    background: var(--amig-surface);
+    color: var(--amig-muted);
+    border-color: var(--amig-border);
+    border-radius: 6px;
+}
+
+.amig-btn-icon:hover {
+    border-color: var(--amig-primary);
+    color: var(--amig-primary);
+}
+
+.amig-btn-icon .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* 小さいボタン */
+.amig-btn-sm {
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+.amig-btn-sm .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+}
+
 .amig-btn-danger {
     background: var(--amig-surface);
     color: var(--amig-danger);
@@ -638,25 +780,51 @@
 
 /* ── 保存ボタンバー ── */
 .amig-save-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 20px;
+    position: relative;
+    padding: 10px 16px;
     border-top: 1px solid var(--amig-border);
     background: #fafafa;
     border-radius: 0 0 var(--amig-radius) var(--amig-radius);
-    gap: 12px;
-    flex-wrap: wrap;
+    text-align: right;
+    white-space: nowrap;
+    line-height: 32px;
+}
+
+.amig-save-bar .amig-save-msg {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    white-space: nowrap;
+}
+
+.amig-save-bar .amig-preview-status {
+    display: inline-block !important;
+    vertical-align: middle;
+    white-space: nowrap;
+    margin-right: 8px;
+}
+
+.amig-save-bar .amig-btn {
+    display: inline-flex !important;
+    vertical-align: middle;
+    width: auto !important;
+    float: none !important;
+    white-space: nowrap;
+    margin-left: 8px;
 }
 
 .amig-save-msg {
     font-size: 13px;
     color: var(--amig-success);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 5px;
     opacity: 0;
     transition: opacity .3s;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1.4;
 }
 
 .amig-save-msg.is-visible {

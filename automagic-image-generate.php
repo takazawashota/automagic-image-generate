@@ -19,7 +19,7 @@ if (!defined('ABSPATH')) {
 
 // プラグインの定数定義
 if (!defined('AMIG_VERSION')) {
-    define('AMIG_VERSION', '1.0.7');
+    define('AMIG_VERSION', '1.0.8');
 }
 if (!defined('AMIG_PLUGIN_DIR')) {
     define('AMIG_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -79,8 +79,8 @@ class Automagic_Image_Generate {
     public function add_admin_menu() {
         // トップレベルメニューを追加
         add_menu_page(
-            'Automagic Image Generate',           // ページタイトル
-            'Automagic Image Generate',           // メニュータイトル
+            '自動画像生成',                           // ページタイトル
+            '自動画像生成',                           // メニュータイトル
             'manage_options',                     // 権限
             'automagic-image-generate',           // メニュースラッグ
             array($this, 'settings_page'),        // コールバック関数
@@ -91,8 +91,8 @@ class Automagic_Image_Generate {
         // サブメニュー（設定）を追加（最初のサブメニューはメインと同じページ）
         add_submenu_page(
             'automagic-image-generate',           // 親メニューのスラッグ
-            'Automagic Image Generate 設定',      // ページタイトル
-            '設定',                                // メニュータイトル
+            '自動画像生成',                 // ページタイトル
+            '自動画像生成',                                // メニュータイトル
             'manage_options',                     // 権限
             'automagic-image-generate',           // メニュースラッグ（親と同じ）
             array($this, 'settings_page')         // コールバック関数
@@ -101,8 +101,8 @@ class Automagic_Image_Generate {
         // サブメニュー（一括生成）を追加
         add_submenu_page(
             'automagic-image-generate',           // 親メニューのスラッグ
-            '一括画像生成',                        // ページタイトル
-            '一括画像生成',                        // メニュータイトル
+            '一括生成',                            // ページタイトル
+            '一括生成',                            // メニュータイトル
             'manage_options',                     // 権限
             'automagic-bulk-generate',            // メニュースラッグ
             array($this, 'bulk_generate_page')    // コールバック関数
@@ -111,8 +111,8 @@ class Automagic_Image_Generate {
         // サブメニュー（生成済み画像管理）を追加
         add_submenu_page(
             'automagic-image-generate',           // 親メニューのスラッグ
-            '生成済み画像管理',                    // ページタイトル
-            '生成済み画像管理',                    // メニュータイトル
+            '生成済み画像',                        // ページタイトル
+            '生成済み画像',                        // メニュータイトル
             'manage_options',                     // 権限
             'automagic-manage-images',            // メニュースラッグ
             array($this, 'manage_images_page')    // コールバック関数
@@ -234,6 +234,46 @@ class Automagic_Image_Generate {
             $this->option_name,
             'amig_design_section'
         );
+
+        add_settings_field(
+            'text_align',
+            'テキスト横揃え',
+            array($this, 'text_align_callback'),
+            $this->option_name,
+            'amig_design_section'
+        );
+
+        add_settings_field(
+            'text_vertical',
+            'テキスト縦位置',
+            array($this, 'text_vertical_callback'),
+            $this->option_name,
+            'amig_design_section'
+        );
+
+        add_settings_field(
+            'max_chars',
+            '最大表示文字数',
+            array($this, 'max_chars_callback'),
+            $this->option_name,
+            'amig_design_section'
+        );
+
+        add_settings_field(
+            'text_bg_opacity',
+            'テキスト背景帯',
+            array($this, 'text_bg_opacity_callback'),
+            $this->option_name,
+            'amig_design_section'
+        );
+
+        add_settings_field(
+            'text_bg_color',
+            'テキスト背景色',
+            array($this, 'text_bg_color_callback'),
+            $this->option_name,
+            'amig_design_section'
+        );
     }
     
     /**
@@ -293,7 +333,34 @@ class Automagic_Image_Generate {
             if ($sanitized['letter_spacing'] < -20) $sanitized['letter_spacing'] = -20;
             if ($sanitized['letter_spacing'] > 50) $sanitized['letter_spacing'] = 50;
         }
-        
+
+        if (isset($input['text_align'])) {
+            $allowed = array('left', 'center', 'right');
+            $sanitized['text_align'] = in_array($input['text_align'], $allowed, true) ? $input['text_align'] : 'center';
+        }
+
+        if (isset($input['text_vertical'])) {
+            $allowed = array('top', 'middle', 'bottom');
+            $sanitized['text_vertical'] = in_array($input['text_vertical'], $allowed, true) ? $input['text_vertical'] : 'middle';
+        }
+
+        if (isset($input['max_chars'])) {
+            $sanitized['max_chars'] = min(200, max(0, absint($input['max_chars'])));
+        }
+
+        if (isset($input['text_bg_opacity'])) {
+            $sanitized['text_bg_opacity'] = min(90, max(0, absint($input['text_bg_opacity'])));
+        }
+
+        if (isset($input['text_bg_color'])) {
+            $sanitized['text_bg_color'] = sanitize_hex_color($input['text_bg_color']);
+        }
+
+        if (isset($input['text_bg_style'])) {
+            $allowed = array('none', 'band', 'marker', 'block');
+            $sanitized['text_bg_style'] = in_array($input['text_bg_style'], $allowed, true) ? $input['text_bg_style'] : 'band';
+        }
+
         return $sanitized;
     }
     
@@ -375,7 +442,7 @@ class Automagic_Image_Generate {
      */
     public function font_size_callback() {
         $options = get_option($this->option_name);
-        $size = isset($options['font_size']) ? $options['font_size'] : 48;
+        $size = isset($options['font_size']) ? $options['font_size'] : 40;
         echo '<input type="number" name="' . $this->option_name . '[font_size]" value="' . esc_attr($size) . '" min="20" max="100" id="amig-font-size" />';
         echo '<p class="description">タイトルのフォントサイズ（20〜100）</p>';
     }
@@ -476,7 +543,7 @@ class Automagic_Image_Generate {
      */
     public function line_height_callback() {
         $options = get_option($this->option_name);
-        $line_height = isset($options['line_height']) ? $options['line_height'] : 1.5;
+        $line_height = isset($options['line_height']) ? $options['line_height'] : 1.8;
         
         echo '<input type="number" name="' . $this->option_name . '[line_height]" value="' . esc_attr($line_height) . '" step="0.1" min="0.5" max="3.0" style="width: 100px;" />';
         echo '<p class="description">テキストの行間隔（0.5〜3.0、推奨: 1.2〜1.8）</p>';
@@ -510,13 +577,19 @@ class Automagic_Image_Generate {
         $bg_color        = isset($options['bg_color'])        ? $options['bg_color']        : '#4A90E2';
         $text_color      = isset($options['text_color'])      ? $options['text_color']      : '#FFFFFF';
         $accent_color    = isset($options['accent_color'])    ? $options['accent_color']    : '#FFD700';
-        $font_size       = isset($options['font_size'])       ? (int)$options['font_size']  : 48;
+        $font_size       = isset($options['font_size'])       ? (int)$options['font_size']  : 40;
         $font_weight     = isset($options['font_weight'])     ? $options['font_weight']     : 'normal';
         $image_style     = isset($options['image_style'])     ? $options['image_style']     : 'modern';
         $bg_image_id     = isset($options['bg_image'])        ? (int)$options['bg_image']   : 0;
         $bg_image_opacity= isset($options['bg_image_opacity'])? (int)$options['bg_image_opacity'] : 30;
-        $line_height     = isset($options['line_height'])     ? (float)$options['line_height'] : 1.5;
+        $line_height     = isset($options['line_height'])     ? (float)$options['line_height'] : 1.8;
         $letter_spacing  = isset($options['letter_spacing'])  ? (int)$options['letter_spacing'] : 0;
+        $text_align      = isset($options['text_align'])      ? $options['text_align']      : 'center';
+        $text_vertical   = isset($options['text_vertical'])   ? $options['text_vertical']   : 'middle';
+        $max_chars       = isset($options['max_chars'])       ? (int)$options['max_chars']  : 0;
+        $text_bg_opacity = isset($options['text_bg_opacity']) ? (int)$options['text_bg_opacity'] : 0;
+        $text_bg_color   = isset($options['text_bg_color'])   ? $options['text_bg_color']   : '#000000';
+        $text_bg_style   = isset($options['text_bg_style'])   ? $options['text_bg_style']   : 'band';
         $enable_auto     = isset($options['enable_auto_generation']) ? (int)$options['enable_auto_generation'] : 0;
         $post_types_sel  = isset($options['post_types'])      ? (array)$options['post_types'] : array('post');
 
@@ -543,7 +616,7 @@ class Automagic_Image_Generate {
 
         $all_post_types = get_post_types(array('public' => true), 'objects');
         ?>
-        <div class="amig-wrap">
+        <div class="wrap amig-wrap">
 
         <!-- ヘッダー -->
         <div class="amig-page-header">
@@ -680,6 +753,143 @@ class Automagic_Image_Generate {
                                        name="<?php echo esc_attr($this->option_name); ?>[font_size]"
                                        value="<?php echo esc_attr($font_size); ?>">
                             </div>
+                            <div class="amig-field">
+                                <label class="amig-label" for="amig-line-height-range">行間</label>
+                                <div class="amig-range-row">
+                                    <input type="range" id="amig-line-height-range"
+                                           min="0.8" max="3.0" step="0.1"
+                                           value="<?php echo esc_attr($line_height); ?>">
+                                    <span class="amig-range-value" id="amig-line-height-val"><?php echo esc_html($line_height); ?></span>
+                                </div>
+                                <input type="hidden" id="amig-line-height"
+                                       name="<?php echo esc_attr($this->option_name); ?>[line_height]"
+                                       value="<?php echo esc_attr($line_height); ?>">
+                            </div>
+                            <div class="amig-field">
+                                <label class="amig-label" for="amig-letter-spacing-range">文字間隔</label>
+                                <div class="amig-range-row">
+                                    <input type="range" id="amig-letter-spacing-range"
+                                           min="-10" max="30" step="1"
+                                           value="<?php echo esc_attr($letter_spacing); ?>">
+                                    <span class="amig-range-value" id="amig-letter-spacing-val"><?php echo esc_html($letter_spacing); ?>px</span>
+                                </div>
+                                <input type="hidden" id="amig-letter-spacing"
+                                       name="<?php echo esc_attr($this->option_name); ?>[letter_spacing]"
+                                       value="<?php echo esc_attr($letter_spacing); ?>">
+                            </div>
+                            <div class="amig-field">
+                                <span class="amig-label">横揃え</span>
+                                <div class="amig-align-group">
+                                    <?php foreach (array('left' => 'dashicons-editor-alignleft', 'center' => 'dashicons-editor-aligncenter', 'right' => 'dashicons-editor-alignright') as $av => $ai): ?>
+                                    <label class="amig-align-btn <?php echo $text_align === $av ? 'is-active' : ''; ?>">
+                                        <input type="radio"
+                                               name="<?php echo esc_attr($this->option_name); ?>[text_align]"
+                                               value="<?php echo esc_attr($av); ?>"
+                                               <?php checked($text_align, $av); ?>>
+                                        <span class="dashicons <?php echo esc_attr($ai); ?>"></span>
+                                    </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- テキスト配置 -->
+                    <div class="amig-card" style="margin-bottom:20px;">
+                        <div class="amig-card-header">
+                            <span class="dashicons dashicons-align-center"></span> テキスト配置
+                        </div>
+                        <div class="amig-card-body">
+                            <div class="amig-field">
+                                <span class="amig-label">縦位置</span>
+                                <div class="amig-align-group">
+                                    <?php foreach (array('top' => '上', 'middle' => '中', 'bottom' => '下') as $vv => $vl): ?>
+                                    <label class="amig-align-btn amig-align-btn-text <?php echo $text_vertical === $vv ? 'is-active' : ''; ?>">
+                                        <input type="radio"
+                                               name="<?php echo esc_attr($this->option_name); ?>[text_vertical]"
+                                               value="<?php echo esc_attr($vv); ?>"
+                                               <?php checked($text_vertical, $vv); ?>>
+                                        <?php echo esc_html($vl); ?>
+                                    </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            <div class="amig-field">
+                                <label class="amig-label" for="amig-max-chars-range">
+                                    最大表示文字数 <span class="amig-description" style="display:inline;">（0＝制限なし）</span>
+                                </label>
+                                <div class="amig-range-row">
+                                    <input type="range" id="amig-max-chars-range"
+                                           min="0" max="200" step="5"
+                                           value="<?php echo esc_attr($max_chars); ?>">
+                                    <span class="amig-range-value" id="amig-max-chars-val">
+                                        <?php echo $max_chars > 0 ? esc_html($max_chars) . '文字' : '制限なし'; ?>
+                                    </span>
+                                </div>
+                                <input type="hidden" id="amig-max-chars"
+                                       name="<?php echo esc_attr($this->option_name); ?>[max_chars]"
+                                       value="<?php echo esc_attr($max_chars); ?>">
+                                <div class="amig-description">長いタイトルを自動で省略します。末尾に「…」が付きます。</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- テキスト装飾 -->
+                    <div class="amig-card" style="margin-bottom:20px;">
+                        <div class="amig-card-header">
+                            <span class="dashicons dashicons-text-page"></span> テキスト装飾
+                        </div>
+                        <div class="amig-card-body" style="padding-top:36px;">
+                            <div class="amig-field">
+                                <label class="amig-label">背景スタイル</label>
+                                <div class="amig-align-group">
+                                    <?php
+                                    $bg_style_options = array(
+                                        'none'   => 'なし',
+                                        'band'   => '横帯',
+                                        'marker' => 'マーカー',
+                                        'block'  => 'ブロック',
+                                    );
+                                    foreach ($bg_style_options as $val => $lbl): ?>
+                                    <label class="amig-align-btn amig-align-btn-text<?php echo $text_bg_style === $val ? ' is-active' : ''; ?>">
+                                        <input type="radio" name="<?php echo esc_attr($this->option_name); ?>[text_bg_style]"
+                                               value="<?php echo esc_attr($val); ?>"
+                                               <?php checked($text_bg_style, $val); ?>>
+                                        <?php echo esc_html($lbl); ?>
+                                    </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            <div class="amig-field">
+                                <label class="amig-label">背景帯の色</label>
+                                <div class="amig-color-row" style="grid-template-columns:1fr;">
+                                    <div class="amig-color-field">
+                                        <div class="amig-color-wrap">
+                                            <input type="color" id="amig-text-bg-color"
+                                                   name="<?php echo esc_attr($this->option_name); ?>[text_bg_color]"
+                                                   value="<?php echo esc_attr($text_bg_color); ?>">
+                                            <input class="amig-color-hex" type="text"
+                                                   value="<?php echo esc_attr($text_bg_color); ?>"
+                                                   maxlength="7" data-for="amig-text-bg-color">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="amig-field">
+                                <label class="amig-label" for="amig-text-bg-opacity-range">
+                                    背景帯の濃さ <span class="amig-description" style="display:inline;">（0＝なし）</span>
+                                </label>
+                                <div class="amig-range-row">
+                                    <input type="range" id="amig-text-bg-opacity-range"
+                                           name="<?php echo esc_attr($this->option_name); ?>[text_bg_opacity]"
+                                           min="0" max="90" step="5"
+                                           value="<?php echo esc_attr($text_bg_opacity); ?>">
+                                    <span class="amig-range-value" id="amig-text-bg-opacity-val">
+                                        <?php echo $text_bg_opacity > 0 ? esc_html($text_bg_opacity) . '%' : 'なし'; ?>
+                                    </span>
+                                </div>
+                                <div class="amig-description">テキストの後ろに半透明の帯を描画してテキストを読みやすくします。</div>
+                            </div>
                         </div>
                     </div>
 
@@ -733,32 +943,43 @@ class Automagic_Image_Generate {
                             <span class="dashicons dashicons-visibility"></span> リアルタイムプレビュー
                         </div>
                         <div class="amig-card-body" style="padding:12px;">
-                            <div class="amig-preview-canvas-wrap" id="amig-preview-wrap">
-                                <img src="" alt="プレビュー" class="amig-preview-image" id="amig-preview-image" style="display:none;">
-                                <div class="amig-preview-placeholder" id="amig-preview-placeholder">
-                                    <span class="dashicons dashicons-format-image"></span>
-                                    <span>設定を変更するとプレビューが表示されます</span>
+                            <div class="amig-preview-box">
+                                <!-- 画像エリア -->
+                                <div class="amig-preview-canvas-wrap" id="amig-preview-wrap">
+                                    <img src="" alt="プレビュー" class="amig-preview-image" id="amig-preview-image" style="display:none;">
+                                    <div class="amig-preview-placeholder" id="amig-preview-placeholder">
+                                        <span class="dashicons dashicons-format-image"></span>
+                                        <span>設定を変更するとプレビューが表示されます</span>
+                                    </div>
+                                    <div class="amig-preview-overlay">
+                                        <div class="amig-preview-spinner"></div>
+                                    </div>
+                                    <span class="amig-preview-size-badge">1200 × 630</span>
                                 </div>
-                                <div class="amig-preview-overlay">
-                                    <div class="amig-preview-spinner"></div>
+                                <!-- フッター -->
+                                <div class="amig-preview-footer">
+                                    <div class="amig-preview-footer-input">
+                                        <input type="text" class="amig-preview-text-input"
+                                               id="amig-preview-text"
+                                               value="日本語タイトルのサンプル"
+                                               placeholder="プレビュー用テキストを入力…">
+                                        <button type="button" id="amig-refresh-preview" class="amig-btn amig-btn-icon" title="プレビューを今すぐ更新">
+                                            <span class="dashicons dashicons-update"></span>
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="amig-preview-footer">
-                                <input type="text" class="amig-preview-text-input"
-                                       id="amig-preview-text"
-                                       value="日本語タイトルのサンプル"
-                                       placeholder="プレビュー用テキスト">
-                                <button type="button" id="amig-refresh-preview" class="amig-btn amig-btn-secondary" style="padding:4px 10px;font-size:12px;">
-                                    <span class="dashicons dashicons-update" style="font-size:14px;width:14px;height:14px;vertical-align:middle;"></span> 更新
-                                </button>
-                                <span class="amig-preview-footer-text">1200×630px</span>
                             </div>
                         </div>
-                        <div class="amig-save-bar">
-                            <span class="amig-save-msg" id="amig-save-msg">
+                        <div class="amig-save-bar" style="position:relative;padding:10px 16px;background:#fafafa;border-top:1px solid #e2e4e7;border-radius:0 0 8px 8px;text-align:right;white-space:nowrap;line-height:32px;">
+                            <span class="amig-save-msg" id="amig-save-msg" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);margin:0;padding:0;">
                                 <span class="dashicons dashicons-yes-alt"></span> 保存しました
                             </span>
-                            <button type="submit" class="amig-btn amig-btn-primary">
+                            <span class="amig-preview-status" id="amig-preview-status" style="display:inline-block;vertical-align:middle;white-space:nowrap;margin-right:4px;">
+                                <span class="dashicons dashicons-clock"></span> 自動更新
+                            </span>
+                            <a href="#" id="amig-download-btn" class="amig-btn amig-btn-secondary" download="thumbnail-preview.jpg" style="display:none;vertical-align:middle;white-space:nowrap;">
+                                <span class="dashicons dashicons-download"></span> ダウンロード
+                            </a>&#8203;<button type="submit" class="amig-btn amig-btn-primary" style="display:inline-flex;width:auto;vertical-align:middle;float:none;">
                                 <span class="dashicons dashicons-saved"></span> 設定を保存
                             </button>
                         </div>
@@ -789,7 +1010,7 @@ class Automagic_Image_Generate {
                             <span class="amig-toggle-track"></span>
                             <span class="amig-toggle-label">投稿保存時に自動でサムネイルを生成する</span>
                         </label>
-                        <p class="amig-description" style="margin-top:8px;">サムネイルが未設定の公開投稿にのみ生成されます。</p>
+                        <div class="amig-description" style="margin-top:8px;">サムネイルが未設定の公開投稿にのみ生成されます。</div>
                     </div>
 
                     <hr class="amig-divider">
@@ -908,7 +1129,14 @@ class Automagic_Image_Generate {
             'post.php',
             'post-new.php',
         );
-        if (!in_array($hook, $allowed_hooks, true)) {
+
+        // slugベースの部分一致でも許可（メニュー名変更時のフック名ずれ対策）
+        $is_amig_page = in_array($hook, $allowed_hooks, true)
+            || strpos($hook, 'automagic-image-generate') !== false
+            || strpos($hook, 'automagic-bulk-generate') !== false
+            || strpos($hook, 'automagic-manage-images') !== false;
+
+        if (!$is_amig_page) {
             return;
         }
 
@@ -1143,13 +1371,19 @@ class Automagic_Image_Generate {
         $bg_color = isset($options['bg_color']) ? $options['bg_color'] : '#4A90E2';
         $text_color = isset($options['text_color']) ? $options['text_color'] : '#FFFFFF';
         $accent_color = isset($options['accent_color']) ? $options['accent_color'] : '#FFD700';
-        $font_size = isset($options['font_size']) ? $options['font_size'] : 48;
+        $font_size = isset($options['font_size']) ? $options['font_size'] : 40;
         $font_weight = isset($options['font_weight']) ? $options['font_weight'] : 'normal';
         $image_style = isset($options['image_style']) ? $options['image_style'] : 'modern';
         $bg_image_id = isset($options['bg_image']) ? $options['bg_image'] : 0;
         $bg_image_opacity = isset($options['bg_image_opacity']) ? $options['bg_image_opacity'] : 30;
-        $line_height = isset($options['line_height']) ? $options['line_height'] : 1.5;
+        $line_height = isset($options['line_height']) ? $options['line_height'] : 1.8;
         $letter_spacing = isset($options['letter_spacing']) ? $options['letter_spacing'] : 0;
+        $text_align    = isset($options['text_align'])    ? $options['text_align']    : 'center';
+        $text_vertical = isset($options['text_vertical']) ? $options['text_vertical'] : 'middle';
+        $max_chars     = isset($options['max_chars'])     ? (int)$options['max_chars'] : 0;
+        $text_bg_opacity = isset($options['text_bg_opacity']) ? (int)$options['text_bg_opacity'] : 0;
+        $text_bg_color = isset($options['text_bg_color']) ? $options['text_bg_color'] : '#000000';
+        $text_bg_style = isset($options['text_bg_style']) ? $options['text_bg_style'] : 'band';
         
         // 画像を生成
         $image_path = $this->create_thumbnail_image(
@@ -1163,7 +1397,13 @@ class Automagic_Image_Generate {
             $bg_image_id,
             $bg_image_opacity,
             $line_height,
-            $letter_spacing
+            $letter_spacing,
+            $text_align,
+            $text_vertical,
+            $max_chars,
+            $text_bg_opacity,
+            $text_bg_color,
+            $text_bg_style
         );
         
         if (!$image_path) {
@@ -1209,13 +1449,19 @@ class Automagic_Image_Generate {
         $bg_color = isset($options['bg_color']) ? $options['bg_color'] : '#4A90E2';
         $text_color = isset($options['text_color']) ? $options['text_color'] : '#FFFFFF';
         $accent_color = isset($options['accent_color']) ? $options['accent_color'] : '#FFD700';
-        $font_size = isset($options['font_size']) ? $options['font_size'] : 48;
+        $font_size = isset($options['font_size']) ? $options['font_size'] : 40;
         $font_weight = isset($options['font_weight']) ? $options['font_weight'] : 'normal';
         $image_style = isset($options['image_style']) ? $options['image_style'] : 'modern';
         $bg_image_id = isset($options['bg_image']) ? $options['bg_image'] : 0;
         $bg_image_opacity = isset($options['bg_image_opacity']) ? $options['bg_image_opacity'] : 30;
-        $line_height = isset($options['line_height']) ? $options['line_height'] : 1.5;
+        $line_height = isset($options['line_height']) ? $options['line_height'] : 1.8;
         $letter_spacing = isset($options['letter_spacing']) ? $options['letter_spacing'] : 0;
+        $text_align    = isset($options['text_align'])    ? $options['text_align']    : 'center';
+        $text_vertical = isset($options['text_vertical']) ? $options['text_vertical'] : 'middle';
+        $max_chars     = isset($options['max_chars'])     ? (int)$options['max_chars'] : 0;
+        $text_bg_opacity = isset($options['text_bg_opacity']) ? (int)$options['text_bg_opacity'] : 0;
+        $text_bg_color = isset($options['text_bg_color']) ? $options['text_bg_color'] : '#000000';
+        $text_bg_style = isset($options['text_bg_style']) ? $options['text_bg_style'] : 'band';
         
         // 画像を生成
         $image_path = $this->create_thumbnail_image(
@@ -1229,7 +1475,13 @@ class Automagic_Image_Generate {
             $bg_image_id,
             $bg_image_opacity,
             $line_height,
-            $letter_spacing
+            $letter_spacing,
+            $text_align,
+            $text_vertical,
+            $max_chars,
+            $text_bg_opacity,
+            $text_bg_color,
+            $text_bg_style
         );
         
         if (!$image_path) {
@@ -1258,7 +1510,7 @@ class Automagic_Image_Generate {
     /**
      * サムネイル画像を作成
      */
-    public function create_thumbnail_image($title, $bg_color, $text_color, $accent_color, $font_size, $font_weight, $style, $bg_image_id = 0, $bg_image_opacity = 30, $line_height = 1.5, $letter_spacing = 0) {
+    public function create_thumbnail_image($title, $bg_color, $text_color, $accent_color, $font_size, $font_weight, $style, $bg_image_id = 0, $bg_image_opacity = 30, $line_height = 1.8, $letter_spacing = 0, $text_align = 'center', $text_vertical = 'middle', $max_chars = 0, $text_bg_opacity = 0, $text_bg_color = '#000000', $text_bg_style = 'band') {
         error_log('Automagic Image Generate: create_thumbnail_image 開始 - title: ' . $title);
         
         // GD拡張が有効か確認
@@ -1363,7 +1615,7 @@ class Automagic_Image_Generate {
         }
         
         // テキストを描画
-        $this->draw_text_on_image($image, $title, $text_color_gd, $font_size, $font_weight, $width, $height, $style, $line_height, $letter_spacing);
+        $this->draw_text_on_image($image, $title, $text_color_gd, $font_size, $font_weight, $width, $height, $style, $line_height, $letter_spacing, $text_align, $text_vertical, $max_chars, $text_bg_opacity, $text_bg_color, $text_bg_style);
         
         // 一時ファイルとして保存
         $upload_dir = wp_upload_dir();
@@ -1594,13 +1846,13 @@ class Automagic_Image_Generate {
     /**
      * テキストを画像に描画
      */
-    private function draw_text_on_image($image, $text, $color, $font_size, $font_weight, $width, $height, $style, $line_height_multiplier = 1.5, $letter_spacing = 0) {
+    private function draw_text_on_image($image, $text, $color, $font_size, $font_weight, $width, $height, $style, $line_height_multiplier = 1.8, $letter_spacing = 0, $text_align = 'center', $text_vertical = 'middle', $max_chars = 0, $text_bg_opacity = 0, $text_bg_color = '#000000', $text_bg_style = 'band') {
         // システムフォントを使用（日本語対応）
         $font_path = $this->get_japanese_font_path($font_weight);
         
         if ($font_path && file_exists($font_path)) {
             // TrueTypeフォントを使用
-            $this->draw_text_with_font($image, $text, $color, $font_size, $width, $height, $font_path, $style, $font_weight, $line_height_multiplier, $letter_spacing);
+            $this->draw_text_with_font($image, $text, $color, $font_size, $width, $height, $font_path, $style, $font_weight, $line_height_multiplier, $letter_spacing, $text_align, $text_vertical, $max_chars, $text_bg_opacity, $text_bg_color, $text_bg_style);
         } else {
             // 日本語フォントが見つからない場合はエラーログを記録
             error_log('Automagic Image Generate: 日本語フォントが見つかりません。アルファベットのみ表示されます。');
@@ -1618,58 +1870,78 @@ class Automagic_Image_Generate {
     /**
      * TrueTypeフォントでテキストを描画
      */
-    private function draw_text_with_font($image, $text, $color, $font_size, $width, $height, $font_path, $style, $font_weight = 'normal', $line_height_multiplier = 1.5, $letter_spacing = 0) {
-        // UTF-8エンコーディングを確実にする
+    private function draw_text_with_font($image, $text, $color, $font_size, $width, $height, $font_path, $style, $font_weight = 'normal', $line_height_multiplier = 1.8, $letter_spacing = 0, $text_align = 'center', $text_vertical = 'middle', $max_chars = 0, $text_bg_opacity = 0, $text_bg_color = '#000000', $text_bg_style = 'band') {
         if (!mb_check_encoding($text, 'UTF-8')) {
             $text = mb_convert_encoding($text, 'UTF-8', 'auto');
         }
 
-        // スタイル別のテキスト描画領域とオフセットを決定
-        $text_x_offset  = 0;   // テキスト全体の X オフセット（中央揃え基点移動）
-        $text_area_w    = $width;  // テキスト折り返し幅
-        $text_area_left = 0;   // 左端起点（左揃え時）
-        $align          = 'center';
-        $y_center_offset = 0;  // 垂直中央の調整
+        // 最大表示文字数でトリミング
+        if ($max_chars > 0 && mb_strlen($text, 'UTF-8') > $max_chars) {
+            $text = mb_substr($text, 0, $max_chars, 'UTF-8') . '…';
+        }
+
+        // スタイル別のテキスト描画領域を決定
+        $text_area_w    = $width - 120;
+        $text_area_left = 60;
+        $y_center_offset = 0;
 
         switch ($style) {
             case 'split':
-                // 右側 62% の領域にテキストを配置
-                $split = (int)($width * 0.38);
+                $split          = (int)($width * 0.38);
                 $text_area_left = $split + 40;
                 $text_area_w    = $width - $text_area_left - 40;
-                $align          = 'left';
                 break;
             case 'badge':
-                // 上部 78% の領域にテキストを配置（下帯の上）
-                $band_h         = (int)($height * 0.22);
-                $text_area_w    = $width - 120;
-                $y_center_offset = -(int)($band_h / 2);
-                break;
-            case 'frame':
-                // 内側枠の内側に収める
-                $text_area_w    = $width - 120;
-                break;
-            case 'minimal':
-                // 左縦ラインの右からテキスト
-                $text_area_w    = $width - 120;
+                if ($text_vertical === 'middle') {
+                    $band_h          = (int)($height * 0.22);
+                    $y_center_offset = -(int)($band_h / 2);
+                }
                 break;
             default:
-                $text_area_w    = $width - 120;
                 break;
         }
 
         // テキストを折り返し
         $lines = $this->wrap_text($text, $font_size, $font_path, $text_area_w, $letter_spacing);
+        if (empty($lines)) return;
 
-        if (empty($lines)) {
-            return;
+        $line_height  = $font_size * $line_height_multiplier;
+        $total_height = count($lines) * $line_height;
+
+        // 縦位置
+        switch ($text_vertical) {
+            case 'top':
+                $y_start = 60 + $font_size;
+                break;
+            case 'bottom':
+                $y_start = $height - $total_height - 50 + $font_size;
+                break;
+            default: // middle
+                $y_start = ($height - $total_height) / 2 + $font_size + $y_center_offset;
+                break;
         }
 
-        $line_height   = $font_size * $line_height_multiplier;
-        $total_height  = count($lines) * $line_height;
+        // 横揃えモード（splitは常に左揃え）
+        $align_mode = ($style === 'split') ? 'left' : $text_align;
 
-        // 垂直中央
-        $y_start = ($height - $total_height) / 2 + $font_size + $y_center_offset;
+        // テキスト背景を準備
+        $draw_bg = ($text_bg_opacity > 0 && $text_bg_style !== 'none');
+        $bg_fill = null;
+        if ($draw_bg) {
+            $bg_rgb_arr = $this->hex_to_rgb($text_bg_color);
+            $gd_alpha   = max(0, min(127, (int)(127.0 * (1.0 - $text_bg_opacity / 100.0))));
+            $bg_fill    = imagecolorallocatealpha($image, $bg_rgb_arr[0], $bg_rgb_arr[1], $bg_rgb_arr[2], $gd_alpha);
+            imagealphablending($image, true);
+            if ($text_bg_style === 'band') {
+                $pad_x = 40;
+                $pad_y = 16;
+                $bg_x1 = max(0, $text_area_left - $pad_x);
+                $bg_y1 = max(0, (int)($y_start - $font_size - $pad_y));
+                $bg_x2 = min($width, $width - 60 + $pad_x);
+                $bg_y2 = min($height, (int)($y_start - $font_size + $total_height + $pad_y));
+                imagefilledrectangle($image, $bg_x1, $bg_y1, $bg_x2, $bg_y2, $bg_fill);
+            }
+        }
 
         // 太字シミュレーション用のオフセット
         $bold_offset = 0;
@@ -1679,61 +1951,87 @@ class Automagic_Image_Generate {
             case 'black':  $bold_offset = 3; break;
         }
 
+        // 影を出さないスタイル
+        $no_shadow = in_array($style, array('minimal', 'split', 'frame'), true);
+
         foreach ($lines as $index => $line) {
-            if (empty(trim($line))) {
-                continue;
-            }
+            if (empty(trim($line))) continue;
 
             $text_width = $this->calculate_text_width($line, $font_size, $font_path, $letter_spacing);
 
-            if ($align === 'left') {
-                $x = (int)$text_area_left;
-            } else {
-                $x = (int)(($width - $text_width) / 2);
+            // 横位置
+            switch ($align_mode) {
+                case 'left':
+                    $x = $text_area_left;
+                    break;
+                case 'right':
+                    $x = (int)($width - $text_width - 60);
+                    break;
+                default: // center
+                    if ($style === 'split') {
+                        $x = (int)($text_area_left + ($text_area_w - $text_width) / 2);
+                    } else {
+                        $x = (int)(($width - $text_width) / 2);
+                    }
+                    break;
             }
+
             $y = (int)($y_start + ($index * $line_height));
 
-            // ミニマルと分割右側は影なし、それ以外は影あり
-            $no_shadow = ($style === 'minimal' || $style === 'split' || $style === 'frame');
-            if (!$no_shadow) {
+            // 行ごとの背景（marker / block）
+            if ($draw_bg && $bg_fill !== null && ($text_bg_style === 'marker' || $text_bg_style === 'block')) {
+                $pad = 10;
+                $rx1 = max(0, $x - $pad);
+                $rx2 = min($width, $x + $text_width + $pad);
+                if ($text_bg_style === 'marker') {
+                    // マーカー：文字の下部寄り（細め）
+                    $ry1 = (int)($y - (int)($font_size * 0.25));
+                    $ry2 = (int)($y + 8);
+                } else {
+                    // ブロック：文字の高さいっぱい
+                    $ry1 = (int)($y - $font_size + 4);
+                    $ry2 = (int)($y + 10);
+                }
+                imagefilledrectangle($image, $rx1, max(0, $ry1), $rx2, min($height, $ry2), $bg_fill);
+            }
+
+            // 影（テキスト背景が濃い場合は省略）
+            if (!$no_shadow && (!$draw_bg || $text_bg_opacity < 50)) {
                 $shadow = imagecolorallocatealpha($image, 0, 0, 0, 50);
                 if ($letter_spacing > 0) {
-                    $current_x = $x;
+                    $cur_x = $x;
                     $chars = preg_split('//u', $line, -1, PREG_SPLIT_NO_EMPTY);
                     foreach ($chars as $char) {
-                        imagettftext($image, $font_size, 0, $current_x + 3, $y + 3, $shadow, $font_path, $char);
-                        $char_bbox  = imagettfbbox($font_size, 0, $font_path, $char);
-                        $current_x += ($char_bbox[2] - $char_bbox[0]) + $letter_spacing;
+                        imagettftext($image, $font_size, 0, $cur_x + 3, $y + 3, $shadow, $font_path, $char);
+                        $bbox   = imagettfbbox($font_size, 0, $font_path, $char);
+                        $cur_x += ($bbox[2] - $bbox[0]) + $letter_spacing;
                     }
                 } else {
                     imagettftext($image, $font_size, 0, $x + 3, $y + 3, $shadow, $font_path, $line);
                 }
             }
-            // 太字効果（複数回描画）
+
+            // 本文（太字効果込み）
             if ($letter_spacing > 0) {
-                $current_x = $x;
+                $cur_x = $x;
                 $chars = preg_split('//u', $line, -1, PREG_SPLIT_NO_EMPTY);
                 foreach ($chars as $char) {
                     if ($bold_offset > 0) {
                         for ($i = 0; $i <= $bold_offset; $i++) {
-                            imagettftext($image, $font_size, 0, $current_x + $i, $y, $color, $font_path, $char);
-                            if ($i > 0) {
-                                imagettftext($image, $font_size, 0, $current_x, $y + $i, $color, $font_path, $char);
-                            }
+                            imagettftext($image, $font_size, 0, $cur_x + $i, $y, $color, $font_path, $char);
+                            if ($i > 0) imagettftext($image, $font_size, 0, $cur_x, $y + $i, $color, $font_path, $char);
                         }
                     } else {
-                        imagettftext($image, $font_size, 0, $current_x, $y, $color, $font_path, $char);
+                        imagettftext($image, $font_size, 0, $cur_x, $y, $color, $font_path, $char);
                     }
-                    $char_bbox  = imagettfbbox($font_size, 0, $font_path, $char);
-                    $current_x += ($char_bbox[2] - $char_bbox[0]) + $letter_spacing;
+                    $bbox   = imagettfbbox($font_size, 0, $font_path, $char);
+                    $cur_x += ($bbox[2] - $bbox[0]) + $letter_spacing;
                 }
             } else {
                 if ($bold_offset > 0) {
                     for ($i = 0; $i <= $bold_offset; $i++) {
                         imagettftext($image, $font_size, 0, $x + $i, $y, $color, $font_path, $line);
-                        if ($i > 0) {
-                            imagettftext($image, $font_size, 0, $x, $y + $i, $color, $font_path, $line);
-                        }
+                        if ($i > 0) imagettftext($image, $font_size, 0, $x, $y + $i, $color, $font_path, $line);
                     }
                 } else {
                     imagettftext($image, $font_size, 0, $x, $y, $color, $font_path, $line);
@@ -2051,7 +2349,7 @@ class Automagic_Image_Generate {
         global $wpdb;
         $post_types = get_post_types(array('public' => true), 'objects');
         ?>
-        <div class="amig-wrap">
+        <div class="wrap amig-wrap">
 
         <div class="amig-page-header">
             <h1 class="amig-page-title">
@@ -2287,7 +2585,7 @@ class Automagic_Image_Generate {
             }
         }
         ?>
-        <div class="amig-wrap">
+        <div class="wrap amig-wrap">
 
         <div class="amig-page-header">
             <h1 class="amig-page-title">
@@ -2771,13 +3069,19 @@ function amig_preview_generate_callback() {
         $bg_color         = isset($posted['bg_color'])         ? $posted['bg_color']         : (isset($options['bg_color'])         ? $options['bg_color']         : '#4A90E2');
         $text_color       = isset($posted['text_color'])       ? $posted['text_color']       : (isset($options['text_color'])       ? $options['text_color']       : '#FFFFFF');
         $accent_color     = isset($posted['accent_color'])     ? $posted['accent_color']     : (isset($options['accent_color'])     ? $options['accent_color']     : '#FFD700');
-        $font_size        = isset($posted['font_size'])        ? intval($posted['font_size'])         : (isset($options['font_size'])        ? intval($options['font_size'])        : 48);
+        $font_size        = isset($posted['font_size'])        ? intval($posted['font_size'])         : (isset($options['font_size'])        ? intval($options['font_size'])        : 40);
         $font_weight      = isset($posted['font_weight'])      ? $posted['font_weight']               : (isset($options['font_weight'])      ? $options['font_weight']              : 'normal');
         $image_style      = isset($posted['image_style'])      ? $posted['image_style']               : (isset($options['image_style'])      ? $options['image_style']              : 'modern');
         $bg_image_id      = isset($posted['bg_image'])         ? intval($posted['bg_image'])          : (isset($options['bg_image'])         ? intval($options['bg_image'])         : 0);
         $bg_image_opacity = isset($posted['bg_image_opacity']) ? intval($posted['bg_image_opacity'])  : (isset($options['bg_image_opacity']) ? intval($options['bg_image_opacity']) : 30);
-        $line_height      = isset($posted['line_height'])      ? floatval($posted['line_height'])     : (isset($options['line_height'])      ? floatval($options['line_height'])     : 1.5);
+        $line_height      = isset($posted['line_height'])      ? floatval($posted['line_height'])     : (isset($options['line_height'])      ? floatval($options['line_height'])     : 1.8);
         $letter_spacing   = isset($posted['letter_spacing'])   ? intval($posted['letter_spacing'])   : (isset($options['letter_spacing'])   ? intval($options['letter_spacing'])   : 0);
+        $text_align       = isset($posted['text_align'])       ? $posted['text_align']               : (isset($options['text_align'])       ? $options['text_align']               : 'center');
+        $text_vertical    = isset($posted['text_vertical'])    ? $posted['text_vertical']            : (isset($options['text_vertical'])    ? $options['text_vertical']            : 'middle');
+        $max_chars        = isset($posted['max_chars'])        ? intval($posted['max_chars'])         : (isset($options['max_chars'])        ? intval($options['max_chars'])        : 0);
+        $text_bg_opacity  = isset($posted['text_bg_opacity'])  ? intval($posted['text_bg_opacity'])   : (isset($options['text_bg_opacity'])  ? intval($options['text_bg_opacity'])  : 0);
+        $text_bg_color    = isset($posted['text_bg_color'])    ? $posted['text_bg_color']             : (isset($options['text_bg_color'])    ? $options['text_bg_color']            : '#000000');
+        $text_bg_style    = isset($posted['text_bg_style'])    ? $posted['text_bg_style']             : (isset($options['text_bg_style'])    ? $options['text_bg_style']            : 'band');
 
         // 画像を生成（create_thumbnail_image は public メソッド）
         $image_path = $instance->create_thumbnail_image(
@@ -2791,7 +3095,13 @@ function amig_preview_generate_callback() {
             $bg_image_id,
             $bg_image_opacity,
             $line_height,
-            $letter_spacing
+            $letter_spacing,
+            $text_align,
+            $text_vertical,
+            $max_chars,
+            $text_bg_opacity,
+            $text_bg_color,
+            $text_bg_style
         );
 
         if (!$image_path || !file_exists($image_path)) {
